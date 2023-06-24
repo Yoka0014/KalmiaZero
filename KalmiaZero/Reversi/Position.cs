@@ -7,7 +7,17 @@ namespace KalmiaZero.Reversi
 {
     public struct Position
     {
-        public DiscColor SideToMove { get; private set; }
+        public DiscColor SideToMove 
+        {
+            readonly get => this.sideToMove;
+
+            set 
+            {
+                if (this.sideToMove != value)
+                    Pass();
+            } 
+        }
+
         public DiscColor OpponentColor { get; private set; }
 
         public readonly int PlayerDiscCount => this.bitboard.PlayerDiscCount;
@@ -21,6 +31,7 @@ namespace KalmiaZero.Reversi
         public readonly bool IsGameOver => this.bitboard.ComputePlayerMobility() == 0UL &&  this.bitboard.ComputeOpponentMobility() == 0UL;
 
         Bitboard bitboard;
+        DiscColor sideToMove;
 
         public Position()
         {
@@ -123,22 +134,28 @@ namespace KalmiaZero.Reversi
             this.bitboard.Undo(move.Coord, move.Flip);
         }
 
-        public readonly int GetNextMoves(ref Span<Move> moves)
+        public readonly int GetNextMoves(ref Span<BoardCoordinate> moves)
         {
             ulong mobility = this.bitboard.ComputePlayerMobility();
             var moveCount = 0;
             for (var coord = BitManipulations.FindFirstSet(mobility); mobility != 0; coord = BitManipulations.FindNextSet(mobility))
-                moves[moveCount++].Coord = (BoardCoordinate)coord;
+                moves[moveCount++] = (BoardCoordinate)coord;
             return moveCount;
         }
 
-        public readonly IEnumerable<Move> EnumerateNextMoves()
+        public readonly IEnumerable<BoardCoordinate> EnumerateNextMoves()
         {
             foreach (var coord in BitManipulations.EnumerateSets(this.bitboard.ComputePlayerMobility()))
-                yield return new Move((BoardCoordinate)coord);
+                yield return (BoardCoordinate)coord;
         }
 
-        public readonly void SetFlippingDiscsToMove(ref Move move) => move.Flip = this.bitboard.ComputeFlippingDiscs(move.Coord);
+        public readonly Move CreateMove(BoardCoordinate coord) => new Move(coord, this.bitboard.ComputeFlippingDiscs(coord));
+
+        public readonly void CreateMove(BoardCoordinate coord, ref Move move)
+        {
+            move.Coord = coord;
+            move.Flip = this.bitboard.ComputeFlippingDiscs(coord);
+        }
 
         public readonly GameResult GetGameResult()
         {
