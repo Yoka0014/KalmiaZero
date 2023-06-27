@@ -154,6 +154,8 @@ namespace KalmiaZero.Utils
         int timeLeftMs;     // main time left + byoyomi
         int checkPointMs;
 
+        public GameTimer() : this(new GameTimerOptions()) { }
+
         public GameTimer(GameTimerOptions options)
         {
             this.MainTimeMs = options.MainTimeMs;

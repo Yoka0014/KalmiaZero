@@ -73,7 +73,10 @@ namespace KalmiaZero.Engines
         public string Version { get; private set; }
         public string Author { get; private set; }
 
-        public EvalScoreType EvalScoreType { get; protected set; }
+        public EvalScoreType EvalScoreType { get; protected set; } = EvalScoreType.Other;
+
+        public double EvalScoreMin { get; protected set; } = 0.0f;
+        public double EvalScoreMax { get; protected set; } = 0.0f;
 
         public event EventHandler<string> MessageWasSent = delegate { };
         public event EventHandler<string> ErrorMessageWasSent = delegate { };
@@ -82,7 +85,7 @@ namespace KalmiaZero.Engines
         public event EventHandler<EngineMove> MoveWasSent = delegate { };
         public event EventHandler AnalysisEnded = delegate { };
 
-        protected EngineOptions Options { get; } = new();
+        protected EngineOptions Options = new();
         protected Position Position => this.position;
         protected ReadOnlyCollection<Move> MoveHistory => new(this.moveHistory);
 
@@ -185,6 +188,25 @@ namespace KalmiaZero.Engines
                 yield return (option.Key, option.Value);
         }
 
+
+        public abstract void Quit();
+        public abstract void SetMainTime(DiscColor color, int mainTimeMs);
+        public abstract void SetByoyomi(DiscColor color, int byoyomiMs);
+        public abstract void SetByoyomiStones(DiscColor color, int byoyomiStones);
+        public abstract void SetTimeIncrement(DiscColor color, int incMs);
+        public abstract void SetLevel(int level);
+        public abstract void SetBookContempt(int contempt);
+        public abstract void AddCurrentGameToBook();
+        public abstract void Go(bool ponder);
+        public abstract void Analyze(int numMoves);
+        public abstract void StopThinking(int timeoutMs);
+
+        protected void SendTextMessage(string msg) => this.MessageWasSent.Invoke(this, msg);
+        protected void SendErrorMessage(string errMsg) => this.ErrorMessageWasSent.Invoke(this, errMsg);
+        protected void SendThinkInfo(ThinkInfo thinkInfo) => this.ThinkInfoWasSent.Invoke(this, thinkInfo);
+        protected void SendMultiPV(MultiPV multiPV) => this.MultiPVWereSent.Invoke(this, multiPV);
+        protected void SendMove(EngineMove move) => this.MoveWasSent.Invoke(this, move);
+
         protected abstract bool OnReady();
         protected abstract void OnStartGame();
         protected abstract void OnEndGame();
@@ -192,11 +214,5 @@ namespace KalmiaZero.Engines
         protected abstract void OnClearedPosition();
         protected abstract void OnUpdatedPosition();
         protected abstract void OnUndidPosition();
-
-        protected void SendTextMessage(string msg) => this.MessageWasSent.Invoke(this, msg);
-        protected void SendErrorMessage(string errMsg) => this.ErrorMessageWasSent.Invoke(this, errMsg);
-        protected void SendThinkInfo(ThinkInfo thinkInfo) => this.ThinkInfoWasSent.Invoke(this, thinkInfo);
-        protected void SendMultiPV(MultiPV multiPV) => this.MultiPVWereSent.Invoke(this, multiPV);
-        protected void SendMove(EngineMove move) => this.MoveWasSent.Invoke(this, move);
     }
 }

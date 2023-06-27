@@ -217,12 +217,12 @@ namespace KalmiaZero.GameFormats
                     var idx = s.IndexOf(',');   // According to the GGF specification, some options can be specified after a colon,
                                                 // but there are few reversi games that use them, so a colon is ignored. 
                     if(idx != -1)
-                        s = s.Substring(0, idx);
+                        s = s[..idx];
                     clockTime.Add(s);
                 }
 
                 if (clockTime.Count > 3)
-                    throw new GGFParserException("The representation of clock time was invalid. Valid format is \"[hour]:[minute]:[second]\".");
+                    throw new GGFParserException("The representation of clock time was invalid. Valid format is \"[hours]:[minutes]:[seconds]\".");
 
                 var timeMs = 0;
                 var unit = 1000;
