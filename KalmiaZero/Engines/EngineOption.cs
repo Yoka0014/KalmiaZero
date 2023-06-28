@@ -40,7 +40,7 @@ namespace KalmiaZero.Engines
                     return;
 
                 this.currentValue = value;
-                this.ValueChanged.Invoke(this, value);
+                this.ValueChanged(this, value);
             }
         }
 
@@ -53,7 +53,7 @@ namespace KalmiaZero.Engines
                 if (this.Type == EngineOptionType.Button)
                     return;
 
-                (bool isValid, dynamic v) = this.parser.Invoke(value);
+                (bool isValid, dynamic v) = this.parser(value);
                 if (isValid)
                     this.CurrentValue = v;
             }

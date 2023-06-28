@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace KalmiaZero.Utils
 {
     public class Tokenizer
     {
         public int Pos { get; private set; }
-        public bool IsEndOfString { get; private set; }
+        public bool IsEndOfString => this.Pos == this.input.Length;
 
         public string Input
         {
@@ -18,7 +17,6 @@ namespace KalmiaZero.Utils
             {
                 this.input = value;
                 this.Pos = 0;
-                this.IsEndOfString = false;
             }
         }
 
@@ -33,10 +31,7 @@ namespace KalmiaZero.Utils
             SkipDelimiters();
 
             if (this.Pos == this.input.Length)
-            {
-                this.IsEndOfString = true;
                 return '\0';
-            }
 
             return this.input[this.Pos++];
         }
@@ -46,17 +41,11 @@ namespace KalmiaZero.Utils
             SkipDelimiters();
 
             if (this.Pos == this.input.Length)
-            {
-                this.IsEndOfString = true;
                 return string.Empty;
-            }
 
             int startPos = this.Pos;
             while (this.Pos < this.input.Length && !this.DELIMITERS.Contains(this.input[this.Pos]))
                 this.Pos++;
-
-            if (this.Pos == this.input.Length)
-                this.IsEndOfString = true;
 
             return this.input[startPos..this.Pos];
         }
@@ -66,22 +55,28 @@ namespace KalmiaZero.Utils
             SkipDelimiters();
 
             if (this.Pos == this.input.Length)
-            {
-                this.IsEndOfString = true;
                 return string.Empty;
-            }
 
             var span = this.Input.AsSpan(this.Pos);
             var idx = span.IndexOf(end);
             if (idx == -1)
             {
-                this.IsEndOfString = true;
                 this.Pos = this.Input.Length;
                 return span[..span.Length].ToString();
             }
 
             this.Pos += idx + 1;
             return span[..idx].ToString();
+        }
+
+        public string ReadToEnd()
+        {
+            if (this.Pos == this.input.Length)
+                return string.Empty;
+
+            var pos = this.Pos;
+            this.Pos = this.input.Length;
+            return this.input[pos..];
         }
 
         void SkipDelimiters()

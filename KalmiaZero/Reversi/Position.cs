@@ -22,8 +22,8 @@ namespace KalmiaZero.Reversi
 
         public readonly int PlayerDiscCount => this.bitboard.PlayerDiscCount;
         public readonly int OpponentDiscCount => this.bitboard.OpponentDiscCount;
-        public readonly int BlackDiscCount => this.SideToMove == DiscColor.Black ? this.PlayerDiscCount : this.OpponentDiscCount;
-        public readonly int WhiteDiscCount => this.SideToMove == DiscColor.White ? this.PlayerDiscCount : this.OpponentDiscCount;
+        public readonly int BlackDiscCount => this.sideToMove == DiscColor.Black ? this.PlayerDiscCount : this.OpponentDiscCount;
+        public readonly int WhiteDiscCount => this.sideToMove == DiscColor.White ? this.PlayerDiscCount : this.OpponentDiscCount;
         public readonly int DiscCount => this.bitboard.DiscCount;
         public readonly int DiscDiff => this.PlayerDiscCount - this.OpponentDiscCount;
         public readonly int EmptySquareCount => this.bitboard.EmptySquareCount;
@@ -37,22 +37,28 @@ namespace KalmiaZero.Reversi
         {
             this.bitboard = new Bitboard(Utils.COORD_TO_BIT[(int)BoardCoordinate.E4] | Utils.COORD_TO_BIT[(int)BoardCoordinate.D5],
                                          Utils.COORD_TO_BIT[(int)BoardCoordinate.D4] | Utils.COORD_TO_BIT[(int)BoardCoordinate.E5]);
-            this.SideToMove = DiscColor.Black;
+            this.sideToMove = DiscColor.Black;
             this.OpponentColor = DiscColor.White;
         }
 
         public Position(Bitboard bitboard, DiscColor sideToMove)
         {
             this.bitboard = bitboard;
-            this.SideToMove = sideToMove;
+            this.sideToMove = sideToMove;
             this.OpponentColor = Utils.ToOpponentColor(sideToMove);
         }
 
         public readonly Bitboard GetBitboard() => this.bitboard;
         public void SetBitboard(Bitboard bitboard) { this.bitboard = bitboard; }
 
+        public static bool operator==(Position left, Position right)
+            => left.bitboard == right.bitboard && left.sideToMove == right.sideToMove;
+
+        public static bool operator !=(Position left, Position right)
+            => !(left == right);
+
         public readonly bool Equals(Position pos)
-            => this.SideToMove == pos.SideToMove && this.bitboard == pos.bitboard;
+            => this.sideToMove == pos.sideToMove && this.bitboard == pos.bitboard;
 
         public readonly Player GetSquareOwnerAt(BoardCoordinate coord) => this.bitboard.GetSquareOwnerAt(coord);
 
@@ -61,7 +67,7 @@ namespace KalmiaZero.Reversi
             var owner = this.bitboard.GetSquareOwnerAt(coord);
             if (owner == Player.Null)
                 return DiscColor.Null;
-            return owner == Player.First ? this.SideToMove : this.OpponentColor;
+            return owner == Player.First ? this.sideToMove : this.OpponentColor;
         }
 
         public readonly bool IsLegalMoveAt(BoardCoordinate coord)
@@ -69,7 +75,7 @@ namespace KalmiaZero.Reversi
 
         public void Pass()
         {
-            (this.SideToMove, this.OpponentColor) = (this.OpponentColor, this.SideToMove);
+            (this.sideToMove, this.OpponentColor) = (this.OpponentColor, this.sideToMove);
             this.bitboard.Swap();
         }
 
@@ -81,7 +87,7 @@ namespace KalmiaZero.Reversi
             if (color == DiscColor.Null)
                 return;
 
-            if (this.SideToMove == color)
+            if (this.sideToMove == color)
                 PutPlayerDiscAt(coord);
             else
                 PutOpponentDiscAt(coord);
@@ -94,9 +100,9 @@ namespace KalmiaZero.Reversi
         /// Pass move is not supported. Use Position.Pass method instead.
         /// </summary>
         /// <param name="move"></param>
-        public void Update(Move move)
+        public void Update(ref Move move)
         {
-            (this.SideToMove, this.OpponentColor) = (this.OpponentColor, this.SideToMove);
+            (this.sideToMove, this.OpponentColor) = (this.OpponentColor, this.sideToMove);
             this.bitboard.Update(move.Coord, move.Flip);
         }
 
@@ -119,7 +125,8 @@ namespace KalmiaZero.Reversi
             }
 
             ulong flip = this.bitboard.ComputeFlippingDiscs(coord);
-            Update(new Move(coord, flip));
+            var move = new Move(coord, flip);
+            Update(ref move);
             return true;
         }
 
@@ -128,18 +135,18 @@ namespace KalmiaZero.Reversi
         /// Thus, if an illegal move is specified, the contents of the position may lose consistency.
         /// </summary>
         /// <param name="move"></param>
-        public void Undo(Move move)
+        public void Undo(ref Move move)
         {
-            (this.SideToMove, this.OpponentColor) = (this.OpponentColor, this.SideToMove);
+            (this.sideToMove, this.OpponentColor) = (this.OpponentColor, this.sideToMove);
             this.bitboard.Undo(move.Coord, move.Flip);
         }
 
-        public readonly int GetNextMoves(ref Span<BoardCoordinate> moves)
+        public readonly int GetNextMoves(ref Span<Move> moves)
         {
             ulong mobility = this.bitboard.ComputePlayerMobility();
             var moveCount = 0;
             for (var coord = BitManipulations.FindFirstSet(mobility); mobility != 0; coord = BitManipulations.FindNextSet(mobility))
-                moves[moveCount++] = (BoardCoordinate)coord;
+                moves[moveCount++].Coord = (BoardCoordinate)coord;
             return moveCount;
         }
 
@@ -149,13 +156,9 @@ namespace KalmiaZero.Reversi
                 yield return (BoardCoordinate)coord;
         }
 
-        public readonly Move CreateMove(BoardCoordinate coord) => new Move(coord, this.bitboard.ComputeFlippingDiscs(coord));
+        public readonly Move CreateMove(BoardCoordinate coord) => new(coord, this.bitboard.ComputeFlippingDiscs(coord));
 
-        public readonly void CreateMove(BoardCoordinate coord, ref Move move)
-        {
-            move.Coord = coord;
-            move.Flip = this.bitboard.ComputeFlippingDiscs(coord);
-        }
+        public readonly void CreateMove(ref Move move) => move.Flip = this.bitboard.ComputeFlippingDiscs(move.Coord);
 
         public readonly GameResult GetGameResult()
         {

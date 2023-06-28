@@ -1,8 +1,6 @@
 ﻿using System;
 
 using KalmiaZero.GameFormats;
-using KalmiaZero.Reversi;
-using KalmiaZero.Utils;
 
 namespace KalmiaZero
 {

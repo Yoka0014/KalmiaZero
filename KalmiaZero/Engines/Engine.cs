@@ -40,6 +40,7 @@ namespace KalmiaZero.Engines
 
     public class MultiPVItem
     {
+        public int? Depth { get; set; }
         public ulong? NodeCount { get; set; }
         public double? EvalScore { get; set; }
         public EvalScoreType EvalScoreType { get; set; } = EvalScoreType.Other;
@@ -73,6 +74,8 @@ namespace KalmiaZero.Engines
         public string Version { get; private set; }
         public string Author { get; private set; }
 
+        public DiscColor SideToMove => this.position.SideToMove;
+
         public EvalScoreType EvalScoreType { get; protected set; } = EvalScoreType.Other;
 
         public double EvalScoreMin { get; protected set; } = 0.0f;
@@ -98,6 +101,8 @@ namespace KalmiaZero.Engines
             this.Version = version;
             this.Author = author;
         }
+
+        public Position GetPosition() => this.position;
 
         public bool Ready()
         {
@@ -154,7 +159,7 @@ namespace KalmiaZero.Engines
                 return false;
 
             var move = this.position.CreateMove(moveCoord);
-            this.position.Update(move);
+            this.position.Update(ref move);
             this.moveHistory.Add(move);
             OnUpdatedPosition();
             return true;
@@ -165,18 +170,16 @@ namespace KalmiaZero.Engines
             if (this.moveHistory.Count == 0)
                 return false;
 
-            this.position.Undo(this.moveHistory.Last());
+            var move = this.moveHistory.Last();
+            this.position.Undo(ref move);
             OnUndidPosition();
             return true;
         }
 
-        public bool SetOption(string name, string value, ref string errorMsg)
+        public bool SetOption(string name, string value)
         {
             if (!this.Options.TryGetValue(name, out EngineOption? option))
-            {
-                errorMsg = "invalid option.";
                 return false;
-            }
 
             option.CurrentValueString = value;
             return true;
@@ -199,13 +202,13 @@ namespace KalmiaZero.Engines
         public abstract void AddCurrentGameToBook();
         public abstract void Go(bool ponder);
         public abstract void Analyze(int numMoves);
-        public abstract void StopThinking(int timeoutMs);
+        public abstract bool StopThinking(int timeoutMs);
 
-        protected void SendTextMessage(string msg) => this.MessageWasSent.Invoke(this, msg);
-        protected void SendErrorMessage(string errMsg) => this.ErrorMessageWasSent.Invoke(this, errMsg);
-        protected void SendThinkInfo(ThinkInfo thinkInfo) => this.ThinkInfoWasSent.Invoke(this, thinkInfo);
-        protected void SendMultiPV(MultiPV multiPV) => this.MultiPVWereSent.Invoke(this, multiPV);
-        protected void SendMove(EngineMove move) => this.MoveWasSent.Invoke(this, move);
+        protected void SendTextMessage(string msg) => this.MessageWasSent(this, msg);
+        protected void SendErrorMessage(string errMsg) => this.ErrorMessageWasSent(this, errMsg);
+        protected void SendThinkInfo(ThinkInfo thinkInfo) => this.ThinkInfoWasSent(this, thinkInfo);
+        protected void SendMultiPV(MultiPV multiPV) => this.MultiPVWereSent(this, multiPV);
+        protected void SendMove(EngineMove move) => this.MoveWasSent(this, move);
 
         protected abstract bool OnReady();
         protected abstract void OnStartGame();
