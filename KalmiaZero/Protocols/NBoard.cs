@@ -40,6 +40,7 @@ namespace KalmiaZero.Protocols
             this.cmdOut = cmdOut; 
             this.errOut = errOut;
             this.logger = new StreamWriter(Stream.Null);
+            InitCommandHandlers();
         }
 
         void InitCommandHandlers()
@@ -476,7 +477,7 @@ namespace KalmiaZero.Protocols
                 return;
             }
 
-            if (int.TryParse(tokenizer.ReadNext(), out var n))
+            if (!int.TryParse(tokenizer.ReadNext(), out var n))
                 n = 0;
 
             Succeed($"pong {n}");

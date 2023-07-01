@@ -56,6 +56,8 @@ namespace KalmiaZero.Engines
         public EvalScoreType EvalScoreType { get; set; }
         public int? EllapsedMs { get; set; }
 
+        public EngineMove() { }
+
         public EngineMove(BoardCoordinate coord) : this(coord, null, EvalScoreType.Other, null) { }
 
         public EngineMove(BoardCoordinate coord, double? evalScore, EvalScoreType evalScoreType, int? ellapsedMs)

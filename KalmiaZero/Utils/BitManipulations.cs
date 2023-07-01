@@ -20,11 +20,11 @@ namespace KalmiaZero.Utils
         }
 
         public static int FindFirstSet(ulong bits) => BitOperations.TrailingZeroCount(bits);
-        public static int FindNextSet(ulong bits) => FindFirstSet(bits &= (bits - 1));
+        public static int FindNextSet(ref ulong bits) => FindFirstSet(bits &= (bits - 1));
 
         public static IEnumerable<int> EnumerateSets(ulong bits) 
         {
-            for (var i = FindFirstSet(bits); bits != 0; i = FindNextSet(bits))
+            for (var i = FindFirstSet(bits); bits != 0; i = FindNextSet(ref bits))
                 yield return i;
         }
     }

@@ -73,6 +73,8 @@ namespace KalmiaZero.Reversi
         public readonly bool IsLegalMoveAt(BoardCoordinate coord)
             => coord == BoardCoordinate.Pass ? this.CanPass : (this.bitboard.ComputePlayerMobility() & Utils.COORD_TO_BIT[(int)coord]) != 0UL;
 
+        public readonly int GetScore(DiscColor color) => (color == this.sideToMove) ? this.DiscDiff : -this.DiscDiff;
+
         public void Pass()
         {
             (this.sideToMove, this.OpponentColor) = (this.OpponentColor, this.sideToMove);
@@ -145,7 +147,7 @@ namespace KalmiaZero.Reversi
         {
             ulong mobility = this.bitboard.ComputePlayerMobility();
             var moveCount = 0;
-            for (var coord = BitManipulations.FindFirstSet(mobility); mobility != 0; coord = BitManipulations.FindNextSet(mobility))
+            for (var coord = BitManipulations.FindFirstSet(mobility); mobility != 0; coord = BitManipulations.FindNextSet(ref mobility))
                 moves[moveCount++].Coord = (BoardCoordinate)coord;
             return moveCount;
         }
