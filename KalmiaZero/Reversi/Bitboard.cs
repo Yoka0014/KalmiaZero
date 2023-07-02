@@ -28,21 +28,22 @@ namespace KalmiaZero.Reversi
         /// If CPU does not have any instructions to compute CRC32, the bitboard's hash code is computed using Zobrist's hash algorithm.
         /// If CPU has the CRC32 instruction, this table remains empty.
         /// </summary>
-        static readonly ulong[][] HASH_RAND_TABLE = Array.Empty<ulong[]>();
+        static readonly ulong[][,] HASH_RAND_TABLE = Array.Empty<ulong[,]>();
 
         static Bitboard()
         {
             if (!Sse42.IsSupported && !Sse42.X64.IsSupported)
             {
-                HASH_RAND_TABLE = new ulong[2][];
+                HASH_RAND_TABLE = new ulong[2][,];
                 for (var player = 0; player < 2; player++)
                 {
                     // Random numbers are assigned to each bit array in each row.
                     // If the board size is 8, there can be 2 ^ 8 bit arrays for each row.
                     // So 8 * 2 ^ 8 random numbers are needed for each player.
-                    var table = HASH_RAND_TABLE[player] = new ulong[BOARD_SIZE * (2 << BOARD_SIZE)];
-                    for (var i = 0; i < table.Length; i++)
-                        table[i] = (ulong)Random.Shared.NextInt64();
+                    var table = HASH_RAND_TABLE[player] = new ulong[BOARD_SIZE, 2 << BOARD_SIZE];
+                    for (var j = 0; j < table.GetLength(0); j++)
+                        for (var i = 0; i < table.GetLength(1); i++)
+                            table[j, i] = (ulong)Random.Shared.NextInt64();
                 }
             }
         }
@@ -129,8 +130,8 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         readonly unsafe ulong ComputeZobristHashCode()
         {
-            ulong[] pRand = HASH_RAND_TABLE[0];
-            ulong[] oRand = HASH_RAND_TABLE[1];
+            ulong[,] pRand = HASH_RAND_TABLE[0];
+            ulong[,] oRand = HASH_RAND_TABLE[1];
 
             var hp = 0UL;
             var ho = 0UL;
@@ -140,9 +141,8 @@ namespace KalmiaZero.Reversi
             var o = (byte*)&opponent;
             for (var i = 0; i < BOARD_SIZE; i++)
             {
-                var offset = BOARD_SIZE * i;
-                hp ^= pRand[offset + p[i]];
-                ho ^= oRand[offset + o[i]];
+                hp ^= pRand[i, p[i]];
+                ho ^= oRand[i, o[i]];
             }
 
             return hp ^ ho;

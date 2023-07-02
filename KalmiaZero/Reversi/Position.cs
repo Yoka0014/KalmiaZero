@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 
 using KalmiaZero.Utils;
 
@@ -57,8 +58,19 @@ namespace KalmiaZero.Reversi
         public static bool operator !=(Position left, Position right)
             => !(left == right);
 
-        public readonly bool Equals(Position pos)
-            => this.sideToMove == pos.sideToMove && this.bitboard == pos.bitboard;
+        /// <summary>
+        /// This method is only for supressing a warning.
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public override readonly bool Equals(object? obj)
+            => (obj is Position pos) && (pos == this);
+
+        /// <summary>
+        /// This method is only for supressing a warning.
+        /// </summary>
+        /// <returns></returns>
+        public override readonly int GetHashCode() => (int)ComputeHashCode();
 
         public readonly Player GetSquareOwnerAt(BoardCoordinate coord) => this.bitboard.GetSquareOwnerAt(coord);
 
@@ -96,6 +108,12 @@ namespace KalmiaZero.Reversi
         }
 
         public void RemoveDiscAt(BoardCoordinate coord) => this.bitboard.RemoveDiscAt(coord);
+
+        public void RemoveAllDiscs()
+        {
+            for (var coord = BoardCoordinate.A1; coord <= BoardCoordinate.H8; coord++)
+                RemoveDiscAt(coord);
+        }
 
         /// <summary>
         /// Update position by a specified move without checking legality.
@@ -168,6 +186,35 @@ namespace KalmiaZero.Reversi
             if (diff == 0)
                 return GameResult.Draw;
             return diff > 0 ? GameResult.Win : GameResult.Loss;
+        }
+
+        public readonly ulong ComputeHashCode() => this.bitboard.ComputeHashCode();
+
+        public override readonly string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.Append("  ");
+            for (var i = 0; i < Constants.BOARD_SIZE; i++)
+                sb.Append((char)('A' + i)).Append(' ');
+
+            (ulong p, ulong o) = (this.bitboard.Player, this.bitboard.Opponent);
+            var mask = 1UL;
+            for(var y = 0; y < Constants.BOARD_SIZE; y++)
+            {
+                sb.Append('\n').Append(y + 1).Append(' ');
+                for(var x = 0; x < Constants.BOARD_SIZE; x++)
+                {
+                    if ((p & mask) != 0UL)
+                        sb.Append((this.sideToMove == DiscColor.Black) ? '*' : 'O').Append(' ');
+                    else if ((o & mask) != 0UL)
+                        sb.Append((this.OpponentColor == DiscColor.Black) ? '*' : 'O').Append(' ');
+                    else
+                        sb.Append("- ");
+                    mask <<= 1;
+                }
+            }
+
+            return sb.ToString();
         }
     }
 }

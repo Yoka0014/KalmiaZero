@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Text.Json;
 
 using KalmiaZero.Engines;
 using KalmiaZero.GameFormats;
+using KalmiaZero.NTuple;
 using KalmiaZero.Protocols;
+using KalmiaZero.Reversi;
 
 namespace KalmiaZero
 {
@@ -10,8 +13,20 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
-            var nb = new NBoard();
-            nb.Mainloop(new MCEngine(), "log.txt");
+            var ntuples = new NTupleInfo(3, 7, 100);
+            var pos = new Position();
+            var i = 0;
+            foreach(var tuples in ntuples.Tuples)
+            {
+                Console.WriteLine($"Tuple ID: {i++}");
+                foreach (var tuple in tuples)
+                {
+                    pos.RemoveAllDiscs();
+                    foreach (var coord in tuple)
+                        pos.PutPlayerDiscAt(coord);
+                    Console.WriteLine($"{pos}\n");
+                }
+            }
         }
     }
 }
