@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -25,6 +24,39 @@ namespace KalmiaZero.NTuple
                 while (tuple is null);
                 this.Tuples[i] = tuple;
             }
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            for(var ntupleID = 0; ntupleID < this.Tuples.Length; ntupleID++) 
+            {
+                sb.Append("NTupleID: ").Append(ntupleID).Append('\n');
+                foreach(var tuple in this.Tuples[ntupleID]) 
+                {
+                    sb.Append("  ");
+                    for (var i = 0; i < Constants.BOARD_SIZE; i++)
+                        sb.Append((char)('A' + i)).Append(' ');
+
+                    var count = 0;
+                    for (var y = 0; y < Constants.BOARD_SIZE; y++)
+                    {
+                        sb.Append('\n').Append(y + 1).Append(' ');
+                        for (var x = 0; x < Constants.BOARD_SIZE; x++)
+                        {
+                            if (tuple.Contains(Reversi.Utils.Coordinate2DTo1D(x, y)))
+                                sb.Append(count++).Append(' ');
+                            else
+                                sb.Append("- ");
+                        }
+                    }
+
+                    sb.Append("\n\n");
+                }
+            }
+
+            return sb.ToString();
         }
 
         static BoardCoordinate[][]? InitNTupleByRandomWalk(int minSize, int maxSize)
@@ -73,5 +105,4 @@ namespace KalmiaZero.NTuple
             return tuples.ToArray();
         }
     }
-
 }
