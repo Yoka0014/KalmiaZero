@@ -2,13 +2,13 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Diagnostics;
 
 using KalmiaZero.Utils;
 using KalmiaZero.Engines;
-using System.Diagnostics;
 using KalmiaZero.GameFormats;
 using KalmiaZero.Reversi;
-using System.Threading;
 
 namespace KalmiaZero.Protocols
 {

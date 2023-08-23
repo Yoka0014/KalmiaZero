@@ -45,6 +45,30 @@ namespace KalmiaZero.Reversi
             BoardCoordinate.A1, BoardCoordinate.B1, BoardCoordinate.C1, BoardCoordinate.D1, BoardCoordinate.E1, BoardCoordinate.F1, BoardCoordinate.G1, BoardCoordinate.H1
         };
 
+        public static ReadOnlySpan<BoardCoordinate> TO_DIAG_A1H8_MIRROR => new BoardCoordinate[NUM_SQUARES]
+        {
+            BoardCoordinate.A1, BoardCoordinate.A2, BoardCoordinate.A3, BoardCoordinate.A4, BoardCoordinate.A5, BoardCoordinate.A6, BoardCoordinate.A7, BoardCoordinate.A8,
+            BoardCoordinate.B1, BoardCoordinate.B2, BoardCoordinate.B3, BoardCoordinate.B4, BoardCoordinate.B5, BoardCoordinate.B6, BoardCoordinate.B7, BoardCoordinate.B8,
+            BoardCoordinate.C1, BoardCoordinate.C2, BoardCoordinate.C3, BoardCoordinate.C4, BoardCoordinate.C5, BoardCoordinate.C6, BoardCoordinate.C7, BoardCoordinate.C8,
+            BoardCoordinate.D1, BoardCoordinate.D2, BoardCoordinate.D3, BoardCoordinate.D4, BoardCoordinate.D5, BoardCoordinate.D6, BoardCoordinate.D7, BoardCoordinate.D8,
+            BoardCoordinate.E1, BoardCoordinate.E2, BoardCoordinate.E3, BoardCoordinate.E4, BoardCoordinate.E5, BoardCoordinate.E6, BoardCoordinate.E7, BoardCoordinate.E8,
+            BoardCoordinate.F1, BoardCoordinate.F2, BoardCoordinate.F3, BoardCoordinate.F4, BoardCoordinate.F5, BoardCoordinate.F6, BoardCoordinate.F7, BoardCoordinate.F8,
+            BoardCoordinate.G1, BoardCoordinate.G2, BoardCoordinate.G3, BoardCoordinate.G4, BoardCoordinate.G5, BoardCoordinate.G6, BoardCoordinate.G7, BoardCoordinate.G8,
+            BoardCoordinate.H1, BoardCoordinate.H2, BoardCoordinate.H3, BoardCoordinate.H4, BoardCoordinate.H5, BoardCoordinate.H6, BoardCoordinate.H7, BoardCoordinate.H8
+        };
+
+        public static ReadOnlySpan<BoardCoordinate> TO_DIAG_A8H1_MIRROR => new BoardCoordinate[NUM_SQUARES] 
+        {
+            BoardCoordinate.H8, BoardCoordinate.H7, BoardCoordinate.H6, BoardCoordinate.H5, BoardCoordinate.H4, BoardCoordinate.H3, BoardCoordinate.H2, BoardCoordinate.H1,
+            BoardCoordinate.G8, BoardCoordinate.G7, BoardCoordinate.G6, BoardCoordinate.G5, BoardCoordinate.G4, BoardCoordinate.G3, BoardCoordinate.G2, BoardCoordinate.G1,
+            BoardCoordinate.F8, BoardCoordinate.F7, BoardCoordinate.F6, BoardCoordinate.F5, BoardCoordinate.F4, BoardCoordinate.F3, BoardCoordinate.F2, BoardCoordinate.F1,
+            BoardCoordinate.E8, BoardCoordinate.E7, BoardCoordinate.E6, BoardCoordinate.E5, BoardCoordinate.E4, BoardCoordinate.E3, BoardCoordinate.E2, BoardCoordinate.E1,
+            BoardCoordinate.D8, BoardCoordinate.D7, BoardCoordinate.D6, BoardCoordinate.D5, BoardCoordinate.D4, BoardCoordinate.D3, BoardCoordinate.D2, BoardCoordinate.D1,
+            BoardCoordinate.C8, BoardCoordinate.C7, BoardCoordinate.C6, BoardCoordinate.C5, BoardCoordinate.C4, BoardCoordinate.C3, BoardCoordinate.C2, BoardCoordinate.C1,
+            BoardCoordinate.B8, BoardCoordinate.B7, BoardCoordinate.B6, BoardCoordinate.B5, BoardCoordinate.B4, BoardCoordinate.B3, BoardCoordinate.B2, BoardCoordinate.B1,
+            BoardCoordinate.A8, BoardCoordinate.A7, BoardCoordinate.A6, BoardCoordinate.A5, BoardCoordinate.A4, BoardCoordinate.A3, BoardCoordinate.A2, BoardCoordinate.A1
+        };
+
         public static ReadOnlySpan<BoardCoordinate> TO_ROTATE90_COORD => new BoardCoordinate[NUM_SQUARES]
         {
             BoardCoordinate.A8, BoardCoordinate.A7, BoardCoordinate.A6, BoardCoordinate.A5, BoardCoordinate.A4, BoardCoordinate.A3, BoardCoordinate.A2, BoardCoordinate.A1,

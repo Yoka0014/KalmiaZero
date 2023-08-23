@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 using KalmiaZero.Reversi;
 
@@ -10,99 +9,127 @@ namespace KalmiaZero.NTuple
 {
     public readonly struct NTupleInfo
     {
-        public BoardCoordinate[][][] Tuples { get; }
+        /// <summary>
+        /// Coordinates that compose N-Tuple containing symmetric expansions.
+        /// </summary>
+        public BoardCoordinate[][] Tuples { get; }
 
-        public NTupleInfo(int minTupleSize, int maxTupleSize, int numTuples)
+        /// <summary>
+        /// Mirrored order of coordinates that compose N-Tuple. The mirroring axis depends on the shape of N-Tuple.
+        /// If there is no mirroring axis, MirrorTable is identical to Tuples[0].
+        /// </summary>
+        public BoardCoordinate[] MirrorTable { get; }
+
+        public NTupleInfo(int size)
         {
-            this.Tuples = new BoardCoordinate[numTuples][][];
-
-            for(var i = 0; i < this.Tuples.Length; i++)
-            {
-                BoardCoordinate[][]? tuple;
-                do
-                    tuple = InitNTupleByRandomWalk(minTupleSize, maxTupleSize);
-                while (tuple is null);
-                this.Tuples[i] = tuple;
-            }
+            this.Tuples = RotateTuple(InitTupleByRandomWalk(size));
+            this.MirrorTable = MirrorTuple(this.Tuples[0]);
         }
 
-        public override string ToString()
+        public override readonly string ToString()
         {
             var sb = new StringBuilder();
-
-            for(var ntupleID = 0; ntupleID < this.Tuples.Length; ntupleID++) 
+            foreach (var tuple in this.Tuples)
             {
-                sb.Append("NTupleID: ").Append(ntupleID).Append('\n');
-                foreach(var tuple in this.Tuples[ntupleID]) 
+                sb.Append("  ");
+                for (var i = 0; i < Constants.BOARD_SIZE; i++)
+                    sb.Append((char)('A' + i)).Append(' ');
+
+                for (var y = 0; y < Constants.BOARD_SIZE; y++)
                 {
-                    sb.Append("  ");
-                    for (var i = 0; i < Constants.BOARD_SIZE; i++)
-                        sb.Append((char)('A' + i)).Append(' ');
-
-                    var count = 0;
-                    for (var y = 0; y < Constants.BOARD_SIZE; y++)
+                    sb.Append('\n').Append(y + 1).Append(' ');
+                    for (var x = 0; x < Constants.BOARD_SIZE; x++)
                     {
-                        sb.Append('\n').Append(y + 1).Append(' ');
-                        for (var x = 0; x < Constants.BOARD_SIZE; x++)
-                        {
-                            if (tuple.Contains(Reversi.Utils.Coordinate2DTo1D(x, y)))
-                                sb.Append(count++).Append(' ');
-                            else
-                                sb.Append("- ");
-                        }
+                        var idx = Array.IndexOf(tuple, Reversi.Utils.Coordinate2DTo1D(x, y));
+                        if (idx != -1)
+                            sb.Append(idx).Append(' ');
+                        else
+                            sb.Append("- ");
                     }
-
-                    sb.Append("\n\n");
                 }
+
+                sb.Append("\n\n");
             }
 
             return sb.ToString();
         }
 
-        static BoardCoordinate[][]? InitNTupleByRandomWalk(int minSize, int maxSize)
+        static BoardCoordinate[] InitTupleByRandomWalk(int size)
         {
-            var tuple = new List<BoardCoordinate>();
-            var coord = (BoardCoordinate)Random.Shared.Next(Constants.NUM_SQUARES);
+            var tuple = new List<BoardCoordinate>(size);    
             var adjCoords = new List<BoardCoordinate>();
-            while (tuple.Count < maxSize)
+
+            do
             {
-                adjCoords.Clear();
-                foreach(var adjCoord in Reversi.Utils.GetAdjacent8Squares(coord))
+                var coord = (BoardCoordinate)Random.Shared.Next(Constants.NUM_SQUARES);
+                while (tuple.Count < size)
                 {
-                    if(!tuple.Contains(adjCoord))
-                        adjCoords.Add(adjCoord);
+                    foreach (var adjCoord in Reversi.Utils.GetAdjacent8Squares(coord))
+                        if (!tuple.Contains(adjCoord))
+                            adjCoords.Add(adjCoord);
+
+                    if (adjCoords.Count == 0)
+                        break;
+
+                    coord = adjCoords[Random.Shared.Next(adjCoords.Count)];
+                    tuple.Add(coord);
+
+                    adjCoords.Clear();
                 }
+            } while (tuple.Count < size);
 
-                if (adjCoords.Count == 0)
-                    break;
+            return tuple.ToArray();
+        }
 
-                coord = adjCoords[Random.Shared.Next(adjCoords.Count)];
-                tuple.Add(coord);
-            }
+        static BoardCoordinate[][] RotateTuple(BoardCoordinate[] tuple)
+        {
+            var tuples = new List<BoardCoordinate[]> { tuple };
+            var rotated = new BoardCoordinate[tuple.Length];
+            Buffer.BlockCopy(tuple, 0, rotated, 0, sizeof(BoardCoordinate) * rotated.Length);
 
-            if (tuple.Count < minSize)
-                return null;
-
-            var tuples = new List<BoardCoordinate[]>();
-            rotate(tuple.OrderBy(x => x).ToArray());
-            rotate(tuple.Select(c => Reversi.Utils.TO_HORIZONTAL_MIRROR_COORD[(int)c]).ToArray());
-
-            void rotate(BoardCoordinate[] rotated)
+            for(var i = 0; i < 3; i++)
             {
-                if (!tuples.Any(x => x.All(y => rotated.Contains(y))))
-                    tuples.Add((BoardCoordinate[])rotated.Clone());
+                for (var j = 0; j < rotated.Length; j++)
+                    rotated[j] = Reversi.Utils.TO_ROTATE90_COORD[(int)rotated[j]];
 
-                for (var i = 0; i < 3; i++)
+                var ordered = rotated.Order();
+                if (!tuples.Any(x => x.Order().SequenceEqual(ordered)))
                 {
-                    for (var j = 0; j < rotated.Length; j++)
-                        rotated[j] = Reversi.Utils.TO_ROTATE90_COORD[(int)rotated[j]];
-
-                    if (!tuples.Any(x => x.All(y => rotated.Contains(y))))
-                        tuples.Add((BoardCoordinate[])rotated.Clone());
+                    var newTuple = new BoardCoordinate[tuple.Length];
+                    Buffer.BlockCopy(rotated, 0, newTuple, 0, sizeof(BoardCoordinate) * rotated.Length);
+                    tuples.Add(newTuple);
                 }
             }
 
             return tuples.ToArray();
+        }
+
+        static BoardCoordinate[] MirrorTuple(BoardCoordinate[] tuple)
+        {
+            var mirrored = new BoardCoordinate[tuple.Length];
+
+            if (mirror(Reversi.Utils.TO_HORIZONTAL_MIRROR_COORD))
+                return mirrored;
+
+            if (mirror(Reversi.Utils.TO_VERTICAL_MIRROR_COORD))
+                return mirrored;
+
+            if (mirror(Reversi.Utils.TO_DIAG_A1H8_MIRROR))
+                return mirrored;
+
+            if (mirror(Reversi.Utils.TO_DIAG_A8H1_MIRROR))
+                return mirrored;
+
+            Buffer.BlockCopy(tuple, 0, mirrored, 0, sizeof(BoardCoordinate) * mirrored.Length);
+            return mirrored;
+
+            bool mirror(ReadOnlySpan<BoardCoordinate> table)
+            {
+                for (var i = 0; i < mirrored.Length; i++)
+                    mirrored[i] = table[(int)tuple[i]];
+
+                return mirrored.Order().SequenceEqual(tuple.Order());
+            }
         }
     }
 }

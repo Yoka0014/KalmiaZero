@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text.Json;
 
 using KalmiaZero.Engines;
@@ -13,8 +14,11 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
-            var ntuples = new NTupleInfo(3, 7, 100);
-            Console.WriteLine(ntuples);
+            for (var i = 0; i < 100; i++)
+            {
+                Console.WriteLine($"ID: {i}\n");
+                Console.WriteLine(new NTupleInfo(7));
+            }
         }
     }
 }
