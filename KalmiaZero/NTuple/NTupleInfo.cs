@@ -12,7 +12,7 @@ namespace KalmiaZero.NTuple
         /// <summary>
         /// Coordinates that compose N-Tuple containing symmetric expansions.
         /// </summary>
-        public BoardCoordinate[][] Tuples { get; }
+        public BoardCoordinate[][] Coordinates { get; }
 
         /// <summary>
         /// Mirrored order of coordinates that compose N-Tuple. The mirroring axis depends on the shape of N-Tuple.
@@ -20,19 +20,49 @@ namespace KalmiaZero.NTuple
         /// </summary>
         public int[] MirrorTable { get; }
 
-        public int Size => this.Tuples[0].Length;
+        public int Size => this.Coordinates[0].Length;
 
         public NTupleInfo(int size)
         {
-            this.Tuples = RotateTuple(InitTupleByRandomWalk(size));
-            var tuple = this.Tuples[0];
-            this.MirrorTable = (from coord in MirrorTuple(tuple) select Array.IndexOf(tuple, coord)).ToArray();
+            this.Coordinates = RotateTuple(InitTupleByRandomWalk(size));
+            var coords = this.Coordinates[0];
+            this.MirrorTable = (from coord in MirrorTuple(coords) select Array.IndexOf(coords, coord)).ToArray();
+        }
+
+        public NTupleInfo(BoardCoordinate[] coords)
+        {
+            this.Coordinates = RotateTuple(coords);
+            this.MirrorTable = (from coord in MirrorTuple(coords) select Array.IndexOf(coords, coord)).ToArray();
+        }
+
+        public NTupleInfo(NTupleInfo nTuple)
+        {
+            this.Coordinates = new BoardCoordinate[nTuple.Coordinates.Length][];
+            for(var i = 0; i < this.Coordinates.Length; i++)
+            {
+                var srcTuple = this.Coordinates[i];
+                var destTuple = this.Coordinates[i] = new BoardCoordinate[srcTuple.Length];
+                Buffer.BlockCopy(srcTuple, 0, destTuple, 0, sizeof(BoardCoordinate) * destTuple.Length);
+            }
+
+            this.MirrorTable = new int[nTuple.MirrorTable.Length];
+            Buffer.BlockCopy(nTuple.MirrorTable, 0, this.MirrorTable, 0, sizeof(int) * this.MirrorTable.Length);
+        }
+
+        public byte[] ToBytes()
+        {
+            var size = BitConverter.GetBytes(this.Size);
+            var buffer = new byte[sizeof(int) + this.Size];
+            Buffer.BlockCopy(size, 0, buffer, 0, size.Length);
+            for (var i = sizeof(int); i < buffer.Length; i++)
+                buffer[i] = (byte)this.Coordinates[0][i - sizeof(int)];
+            return buffer;
         }
 
         public override readonly string ToString()
         {
             var sb = new StringBuilder();
-            foreach (var tuple in this.Tuples)
+            foreach (var tuple in this.Coordinates)
             {
                 sb.Append("  ");
                 for (var i = 0; i < Constants.BOARD_SIZE; i++)
