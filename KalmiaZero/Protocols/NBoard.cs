@@ -291,7 +291,7 @@ namespace KalmiaZero.Protocols
             for(var i = 0; i < num_moves; i++)
             {
                 ref var move = ref moves[i];   
-                currentPos.CreateMove(ref move);
+                currentPos.GenerateMove(ref move);
                 currentPos.Update(ref move);
 
                 if(currentPos == pos)

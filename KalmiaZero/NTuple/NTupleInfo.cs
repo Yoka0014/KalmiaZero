@@ -20,6 +20,8 @@ namespace KalmiaZero.NTuple
         /// </summary>
         public BoardCoordinate[] MirrorTable { get; }
 
+        public int Size => this.Tuples[0].Length;
+
         public NTupleInfo(int size)
         {
             this.Tuples = RotateTuple(InitTupleByRandomWalk(size));

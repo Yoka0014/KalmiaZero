@@ -1,4 +1,7 @@
-﻿namespace KalmiaZero.Reversi
+﻿using System;
+using System.Runtime.CompilerServices;
+
+namespace KalmiaZero.Reversi
 {
     public struct Move
     {
@@ -15,6 +18,17 @@
         {
             this.Coord = coord;
             this.Flip = flip;
+        }
+    }
+
+    public static class MoveSpanExtensions
+    {
+        public static bool Contains(this Span<Move> moves, BoardCoordinate coord)
+        {
+            foreach (var move in moves)
+                if (move.Coord == coord)
+                    return true;
+            return false;
         }
     }
 }

@@ -160,7 +160,7 @@ namespace KalmiaZero.Engines
             if (!this.position.IsLegalMoveAt(moveCoord))
                 return false;
 
-            var move = this.position.CreateMove(moveCoord);
+            var move = this.position.GenerateMove(moveCoord);
             this.position.Update(ref move);
             this.moveHistory.Add(move);
             OnUpdatedPosition();

@@ -176,9 +176,9 @@ namespace KalmiaZero.Reversi
                 yield return (BoardCoordinate)coord;
         }
 
-        public readonly Move CreateMove(BoardCoordinate coord) => new(coord, this.bitboard.ComputeFlippingDiscs(coord));
+        public readonly Move GenerateMove(BoardCoordinate coord) => new(coord, this.bitboard.ComputeFlippingDiscs(coord));
 
-        public readonly void CreateMove(ref Move move) => move.Flip = this.bitboard.ComputeFlippingDiscs(move.Coord);
+        public readonly void GenerateMove(ref Move move) => move.Flip = this.bitboard.ComputeFlippingDiscs(move.Coord);
 
         public readonly GameResult GetGameResult()
         {

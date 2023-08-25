@@ -127,7 +127,7 @@ namespace KalmiaZero.Engines
                 }
 
                 ref var move = ref moves[Random.Shared.Next(numMoves)];
-                pos.CreateMove(ref move);
+                pos.GenerateMove(ref move);
                 pos.Update(ref move);
             }
 
