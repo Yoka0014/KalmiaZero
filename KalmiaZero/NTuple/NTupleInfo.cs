@@ -16,16 +16,17 @@ namespace KalmiaZero.NTuple
 
         /// <summary>
         /// Mirrored order of coordinates that compose N-Tuple. The mirroring axis depends on the shape of N-Tuple.
-        /// If there is no mirroring axis, MirrorTable is identical to Tuples[0].
+        /// If there is no mirroring axis, MirrorTable is int[0].
         /// </summary>
-        public BoardCoordinate[] MirrorTable { get; }
+        public int[] MirrorTable { get; }
 
         public int Size => this.Tuples[0].Length;
 
         public NTupleInfo(int size)
         {
             this.Tuples = RotateTuple(InitTupleByRandomWalk(size));
-            this.MirrorTable = MirrorTuple(this.Tuples[0]);
+            var tuple = this.Tuples[0];
+            this.MirrorTable = (from coord in MirrorTuple(tuple) select Array.IndexOf(tuple, coord)).ToArray();
         }
 
         public override readonly string ToString()
@@ -122,8 +123,7 @@ namespace KalmiaZero.NTuple
             if (mirror(Reversi.Utils.TO_DIAG_A8H1_MIRROR))
                 return mirrored;
 
-            Buffer.BlockCopy(tuple, 0, mirrored, 0, sizeof(BoardCoordinate) * mirrored.Length);
-            return mirrored;
+            return Array.Empty<BoardCoordinate>();
 
             bool mirror(ReadOnlySpan<BoardCoordinate> table)
             {
