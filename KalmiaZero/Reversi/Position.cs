@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Text;
 
 using KalmiaZero.Utils;
@@ -71,6 +72,10 @@ namespace KalmiaZero.Reversi
         /// </summary>
         /// <returns></returns>
         public override readonly int GetHashCode() => (int)ComputeHashCode();
+
+        public void MirrorHorizontal() => this.bitboard.MirrorHorizontal();
+
+        public void Rotate90Clockwise() => this.bitboard.Rotate90Clockwise();
 
         public readonly Player GetSquareOwnerAt(BoardCoordinate coord) => this.bitboard.GetSquareOwnerAt(coord);
 

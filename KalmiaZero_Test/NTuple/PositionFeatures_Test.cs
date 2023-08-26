@@ -17,8 +17,8 @@ namespace KalmiaZero_Test.NTuple
             const int NTUPLE_SIZE = 7;
 
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var expectedPf = new PositionFeatures(nTuples);
-            var actualPf = new PositionFeatures(nTuples);   
+            var expectedPf = new PositionFeature(nTuples);
+            var actualPf = new PositionFeature(nTuples);   
 
             var pos = new Position();
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
@@ -38,6 +38,8 @@ namespace KalmiaZero_Test.NTuple
                     passCount++;
                     continue;
                 }
+
+                passCount = 0;
 
                 var move = moves[Random.Shared.Next(numMoves)];
                 pos.GenerateMove(ref move);

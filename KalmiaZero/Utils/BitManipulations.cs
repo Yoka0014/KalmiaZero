@@ -27,5 +27,12 @@ namespace KalmiaZero.Utils
             for (var i = FindFirstSet(bits); bits != 0; i = FindNextSet(ref bits))
                 yield return i;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ulong DeltaSwap(ulong x, ulong mask, int delta)
+        {
+            var t = (x ^ (x >> delta)) & mask;
+            return x ^ t ^ (t << delta);
+        }
     }
 }

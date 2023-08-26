@@ -19,9 +19,7 @@ namespace KalmiaZero
                 Console.WriteLine($"ID: {i}\n");
 
                 var nTuple = new NTupleInfo(7);
-
-                if(nTuple.MirrorTable.Length != 0)
-                    Console.WriteLine(nTuple);
+                Console.WriteLine(nTuple);
             }
         }
     }

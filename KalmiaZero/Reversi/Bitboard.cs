@@ -64,6 +64,18 @@ namespace KalmiaZero.Reversi
         public override readonly int GetHashCode()   
             => (int)ComputeHashCode();
 
+        public void MirrorHorizontal()
+        {
+            this.Player = MirrorHorizontal(this.Player);
+            this.Opponent = MirrorHorizontal(this.Opponent);
+        }
+
+        public void Rotate90Clockwise()
+        {
+            this.Player = Rotate90Clockwise(this.Player);
+            this.Opponent = Rotate90Clockwise(this.Opponent);
+        }
+
         public readonly Player GetSquareOwnerAt(BoardCoordinate coord)
         {
             var c = (int)coord;
@@ -147,6 +159,40 @@ namespace KalmiaZero.Reversi
 
             return hp ^ ho;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static ulong MirrorHorizontal(ulong bitboard)
+        {
+            bitboard = DeltaSwap(bitboard, 0x5555555555555555, 1);
+            bitboard = DeltaSwap(bitboard, 0x3333333333333333, 2);
+            return DeltaSwap(bitboard, 0x0f0f0f0f0f0f0f0f, 4);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static ulong MirrorVertical(ulong bitboard)
+        {
+            bitboard = DeltaSwap(bitboard, 0x00ff00ff00ff00ff, 8);
+            bitboard = DeltaSwap(bitboard, 0x0000ffff0000ffff, 16);
+            return DeltaSwap(bitboard, 0x00000000ffffffff, 32);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static ulong MirrorDiagA1H8(ulong bitboard)
+        {
+            bitboard = DeltaSwap(bitboard, 0x00aa00aa00aa00aa, 7);
+            bitboard = DeltaSwap(bitboard, 0x0000cccc0000cccc, 14);
+            return DeltaSwap(bitboard, 0x00000000f0f0f0f0, 28);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static ulong MirrorDiagA8H1(ulong bitboard)
+        {
+            bitboard = DeltaSwap(bitboard, 0x00aa00aa00aa00aa, 7);
+            bitboard = DeltaSwap(bitboard, 0x0000cccc0000cccc, 14);
+            return DeltaSwap(bitboard, 0x00000000f0f0f0f0, 28);
+        }
+
+        static ulong Rotate90Clockwise(ulong bitboard) => MirrorHorizontal(MirrorDiagA1H8(bitboard));
 
         static ulong ComputeCrc32(uint crc, ulong data)
         {
