@@ -58,6 +58,26 @@ namespace KalmiaZero.NTuple
             InitFeatureDiffTable();
         }
 
+        public PositionFeature(PositionFeature pf)
+        {
+            this.SideToMove = pf.SideToMove;
+            this.nTuples = (from n in pf.nTuples select new NTupleInfo(n)).ToArray();
+            this.features = new int[pf.NumNTuples][];
+            for(var i = 0; i < this.features.Length; i++)
+            {
+                var f = this.features[i] = new int[pf.features[i].Length];
+                Buffer.BlockCopy(pf.features[i], 0, f, 0, sizeof(int) * f.Length);
+            }
+
+            this.playerUpdator = UpdateAfterBlackMove;
+            this.opponentUpdator = UpdateAfterWhiteMove;
+
+            this.POW_TABLE = new int[this.nTuples.Max(x => x.Size)];
+            InitPowTable();
+
+            InitFeatureDiffTable();
+        }
+
         void InitPowTable()
         {
             this.POW_TABLE[0] = 1;
@@ -146,12 +166,14 @@ namespace KalmiaZero.NTuple
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Pass()
+        public void Pass(Span<Move> legalMoves)
         {
             if (NUM_SQUARE_STATES == 4)
             {
                 RemoveReachableEmpties();
-                this.numPrevLegalMoves = 0;
+                SetReachableEmpties(ref legalMoves);
+                legalMoves.CopyTo(this.prevLegalMoves);
+                this.numPrevLegalMoves = legalMoves.Length;
             }
 
             this.SideToMove = Reversi.Utils.ToOpponentColor(this.SideToMove);

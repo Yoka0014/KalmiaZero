@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 
 using KalmiaZero.Reversi;
 using KalmiaZero.Utils;
@@ -19,7 +20,7 @@ namespace KalmiaZero.NTuple
         Unknown
     }
 
-    public class ValueFunction
+    public class ValueFunction<WeightType> where WeightType : IFloatingPointIeee754<WeightType>
     {
         const string LABEL = "KalmiaZero";
         const string LABEL_INVERSED = "oreZaimlaK";
@@ -28,7 +29,7 @@ namespace KalmiaZero.NTuple
         public ReadOnlySpan<NTupleInfo> NTuples => this.N_TUPLES;
 
         readonly NTupleInfo[] N_TUPLES;
-        readonly float[][][] weights = new float[2][][];     // weights[DiscColor][nTupleID][feature]
+        readonly WeightType[][][] weights = new WeightType[2][][];     // weights[DiscColor][nTupleID][feature]
 
         readonly int[] POW_TABLE;
         readonly int[] NUM_POSSIBLE_FEATURES;   // NUM_POSSIBLE_FEATURES[nTupleID]
@@ -52,13 +53,14 @@ namespace KalmiaZero.NTuple
 
             for (var color = 0; color < 2; color++)
             {
-                var w = this.weights[color] = new float[nTuples.Length][];
+                var w = this.weights[color] = new WeightType[nTuples.Length][];
                 for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
-                    w[nTupleID] = new float[this.NUM_POSSIBLE_FEATURES[nTupleID]];
+                    w[nTupleID] = new WeightType[this.NUM_POSSIBLE_FEATURES[nTupleID]];
             }
         }
 
-        public static ValueFunction LoadFromFile(string filePath)
+        public static ValueFunction<WeightType> LoadFromFile<SrcWeightType>(string filePath)
+            where SrcWeightType : IFloatingPointIeee754<SrcWeightType> 
         {
             const int BUFFER_SIZE = 16;
 
@@ -85,19 +87,31 @@ namespace KalmiaZero.NTuple
                 nTuples[i] = new NTupleInfo(coords);
             }
 
-            var valueFunc = new ValueFunction(nTuples);
+            var valueFunc = new ValueFunction<WeightType>(nTuples);
 
             // load weights
-            var packedWeights = new float[nTuples.Length][];
+            fs.Read(buffer[..sizeof(int)], swapBytes);
+            var weightSize = BitConverter.ToInt32(buffer);
+
+            if (weightSize != Marshal.SizeOf<SrcWeightType>())
+                throw new InvalidDataException($"The size of weight type is invalid.");
+
+            var packedWeights = new WeightType[nTuples.Length][];
             for (var nTupleID = 0; nTupleID < packedWeights.Length; nTupleID++)
             {
                 fs.Read(buffer[..sizeof(int)], swapBytes);
                 var size = BitConverter.ToInt32(buffer);
-                var pw = packedWeights[nTupleID] = new float[size];
+                var pw = packedWeights[nTupleID] = new WeightType[size];
                 for (var i = 0; i < pw.Length; i++)
                 {
-                    fs.Read(buffer[..sizeof(float)], swapBytes);
-                    pw[i] = BitConverter.ToSingle(buffer);
+                    fs.Read(buffer[..Marshal.SizeOf<SrcWeightType>()], swapBytes);
+                    SrcWeightType w;
+                    if (typeof(SrcWeightType) == typeof(Half) && BitConverter.ToHalf(buffer) is SrcWeightType hw)
+                        pw[i] = CastWeightType<SrcWeightType, WeightType>(hw);
+                    else if (typeof(SrcWeightType) == typeof(float) && BitConverter.ToSingle(buffer) is SrcWeightType fw)
+                        pw[i] = CastWeightType<SrcWeightType, WeightType>(fw);
+                    else if (typeof(SrcWeightType) == typeof(double) && BitConverter.ToDouble(buffer) is SrcWeightType dw)
+                        pw[i] = CastWeightType<SrcWeightType, WeightType>(dw);
                 }
             }
 
@@ -108,13 +122,13 @@ namespace KalmiaZero.NTuple
             return valueFunc;
         }
 
-        public ReadOnlySpan<float> GetWeights(DiscColor color, int nTupleID) => this.weights[(int)color][nTupleID];
+        public ReadOnlySpan<WeightType> GetWeights(DiscColor color, int nTupleID) => this.weights[(int)color][nTupleID];
 
-        public void InitWeightsWithUniformRand(float maxWeight = 0.001f) => InitWeightsWithUniformRand(Random.Shared, maxWeight);
+        public void InitWeightsWithUniformRand(WeightType min, WeightType max) => InitWeightsWithUniformRand(Random.Shared, min, max);
 
-        public void InitWeightsWithUniformRand(Random rand, float maxWeight)
+        public void InitWeightsWithUniformRand(Random rand, WeightType min, WeightType max)
         {
-            float[][] bWeights = this.weights[(int)DiscColor.Black];
+            WeightType[][] bWeights = this.weights[(int)DiscColor.Black];
             for (var nTupleID = 0; nTupleID < this.N_TUPLES.Length; nTupleID++)
             {
                 var bw = bWeights[nTupleID];
@@ -123,7 +137,14 @@ namespace KalmiaZero.NTuple
                 {
                     var mirrored = mirror[feature];
                     if (feature <= mirrored)
-                        bw[feature] = rand.NextSingle() * maxWeight;
+                    {
+                        if (typeof(WeightType) == typeof(Half) && (Half)rand.NextSingle() is WeightType hr)
+                            bw[feature] = hr * (max - min) + min;
+                        else if (typeof(WeightType) == typeof(float) && rand.NextSingle() is WeightType fr)
+                            bw[feature] = fr * (max - min) + min;
+                        else if (typeof(WeightType) == typeof(double) && rand.NextDouble() is WeightType dr)
+                            bw[feature] = dr * (max - min) + min;
+                    }
                     else
                         bw[feature] = bw[mirrored];
                 }
@@ -133,8 +154,8 @@ namespace KalmiaZero.NTuple
 
         public void CopyWeightsBlackToWhite()
         {
-            float[][] bWeights = this.weights[(int)DiscColor.Black];
-            float[][] wWeights = this.weights[(int)DiscColor.White];
+            WeightType[][] bWeights = this.weights[(int)DiscColor.Black];
+            WeightType[][] wWeights = this.weights[(int)DiscColor.White];
 
             for(var nTupleID = 0; nTupleID < this.N_TUPLES.Length; nTupleID++)
             {
@@ -146,11 +167,11 @@ namespace KalmiaZero.NTuple
             }
         }
 
-        public float PredictLogit(PositionFeature posFeature)
+        public WeightType PredictLogit(PositionFeature posFeature)
         {
-            float[][] weights = this.weights[(int)posFeature.SideToMove];
+            WeightType[][] weights = this.weights[(int)posFeature.SideToMove];
 
-            var logit = 0.0f;
+            var logit = WeightType.Zero;
             for(var nTupleID = 0; nTupleID < weights.Length; nTupleID++)
             {
                 var w = weights[nTupleID];
@@ -162,8 +183,17 @@ namespace KalmiaZero.NTuple
             return logit;
         }
 
-        public float Predict(PositionFeature pf) => StdSigmoid(PredictLogit(pf));
+        public WeightType Predict(PositionFeature pf) => StdSigmoid(PredictLogit(pf));
 
+        /*
+         * Format:
+         * 
+         * offset = 0:  label(for endianess check)
+         * offset = 10: the number of N-Tuples
+         * offset = 14: N-Tuple's coordinates
+         * offset = M: the size of weight
+         * offset = M + 4: weights
+         */
         public void SaveToFile(string filePath)
         {
             using var fs = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.Write);
@@ -181,12 +211,22 @@ namespace KalmiaZero.NTuple
 
             // save weights
             var packedWeights = PackWeights();
+            var weightSize = Marshal.SizeOf<WeightType>();
+            fs.Write(BitConverter.GetBytes(weightSize));
+            Span<byte> weightBytes = stackalloc byte[weightSize];
             for(var nTupleID = 0; nTupleID < packedWeights.Length; nTupleID++)
             {
                 var pw = packedWeights[nTupleID];
                 fs.Write(BitConverter.GetBytes(pw.Length));
                 foreach (var v in pw)
-                    fs.Write(BitConverter.GetBytes(v));
+                {
+                    if (v is Half hv)
+                        fs.Write(BitConverter.GetBytes(hv));
+                    else if (v is float fv)
+                        fs.Write(BitConverter.GetBytes(fv));
+                    else if(v is double dv)
+                        fs.Write(BitConverter.GetBytes(dv));
+                }
             }
         }
 
@@ -237,16 +277,16 @@ namespace KalmiaZero.NTuple
                 {
                     var mirroredFeature = 0;
                     for (var i = 0; i < nTuple.Size; i++)
-                        mirroredFeature += ((feature / this.POW_TABLE[shuffleTable[i]]) % 3) * this.POW_TABLE[i];
+                        mirroredFeature += ((feature / this.POW_TABLE[nTuple.Size - shuffleTable[i] - 1]) % NUM_SQUARE_STATES) * this.POW_TABLE[nTuple.Size - i - 1];
                     table[feature] = mirroredFeature;
                 }
             }
         }
 
-        float[][] PackWeights()
+        WeightType[][] PackWeights()
         {
-            float[][] weights = this.weights[(int)DiscColor.Black];
-            var packedWeights = (from _ in Enumerable.Range(0, weights.Length) select new List<float>()).ToArray();
+            WeightType[][] weights = this.weights[(int)DiscColor.Black];
+            var packedWeights = (from _ in Enumerable.Range(0, weights.Length) select new List<WeightType>()).ToArray();
             for(var nTupleID = 0; nTupleID < this.N_TUPLES.Length; nTupleID++)
             {
                 var w = weights[nTupleID];
@@ -259,12 +299,12 @@ namespace KalmiaZero.NTuple
             return packedWeights.Select(n => n.ToArray()).ToArray();
         }
 
-        float[][] ExpandPackedWeights(float[][] packedWeights) 
+        WeightType[][] ExpandPackedWeights(WeightType[][] packedWeights) 
         {
-            var weights = new float[this.N_TUPLES.Length][];
+            var weights = new WeightType[this.N_TUPLES.Length][];
             for(var nTupleID = 0; nTupleID < this.N_TUPLES.Length; nTupleID++)
             {
-                var w = weights[nTupleID] = new float[this.NUM_POSSIBLE_FEATURES[nTupleID]];
+                var w = weights[nTupleID] = new WeightType[this.NUM_POSSIBLE_FEATURES[nTupleID]];
                 var pw = packedWeights[nTupleID];
                 int[] mirror = this.MIRROR_FEATURE[nTupleID];
                 var i = 0;
@@ -277,6 +317,41 @@ namespace KalmiaZero.NTuple
             return weights;
         }
 
-        static float StdSigmoid(float x) => 1.0f / (1.0f + FastMath.Exp(-x));
+        static DestWeightType CastWeightType<SrcWeightType, DestWeightType>(SrcWeightType sw)
+            where SrcWeightType : IFloatingPointIeee754<SrcWeightType> where DestWeightType : IFloatingPointIeee754<DestWeightType>
+        {
+            if (sw is DestWeightType ret)
+                return ret;
+
+            if (sw is Half hsw)
+            {
+                if (typeof(DestWeightType) == typeof(float) && (float)hsw is DestWeightType fdw)
+                    return fdw;
+
+                if (typeof(DestWeightType) == typeof(double) && (float)hsw is DestWeightType ddw)
+                    return ddw;
+            }
+            else if (sw is float fsw)
+            {
+                if (typeof(DestWeightType) == typeof(Half) && (Half)fsw is DestWeightType hdw)
+                    return hdw;
+
+                if (typeof(DestWeightType) == typeof(double) && (float)fsw is DestWeightType ddw)
+                    return ddw;
+            }
+            else if (sw is double dsw)
+            {
+                if (typeof(DestWeightType) == typeof(Half) && (Half)dsw is DestWeightType hdw)
+                    return hdw;
+
+                if (typeof(DestWeightType) == typeof(float) && (float)dsw is DestWeightType fdw)
+                    return fdw;
+            }
+
+            throw new InvalidCastException();
+        }
+
+        static T StdSigmoid<T>(T x) where T : IFloatingPointIeee754<T>
+            => T.One / (T.One + T.Exp(-x));
     }
 }

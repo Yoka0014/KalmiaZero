@@ -33,8 +33,9 @@ namespace KalmiaZero_Test.NTuple
                 if(numMoves == 0)
                 {
                     pos.Pass();
-                    expectedPf.Pass();
-                    actualPf.Pass();
+                    numMoves = pos.GetNextMoves(ref moves);
+                    expectedPf.Pass(moves[..numMoves]);
+                    actualPf.Pass(moves[..numMoves]);
                     passCount++;
                     continue;
                 }

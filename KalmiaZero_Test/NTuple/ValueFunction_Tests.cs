@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -22,12 +23,12 @@ namespace KalmiaZero_Test.NTuple
             const int NUM_NTUPLES = 100;
             const int NTUPLE_SIZE = 7;
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var valueFunc = new ValueFunction(nTuples);
-            valueFunc.InitWeightsWithUniformRand();
+            var valueFunc = new ValueFunction<float>(nTuples);
+            valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var fileName = Path.GetRandomFileName();
             valueFunc.SaveToFile(fileName);
-            var loaded = ValueFunction.LoadFromFile(fileName);
+            var loaded = ValueFunction<float>.LoadFromFile<float>(fileName);
 
             for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
             {
@@ -46,13 +47,13 @@ namespace KalmiaZero_Test.NTuple
         [Test]
         public void Predict_Test()
         {
-            const int NUM_NTUPLES = 100;
+            const int NUM_NTUPLES = 10;
             const int NTUPLE_SIZE = 7;
-            const float DELTA = 1.0e-3f;
+            const float DELTA = 1.0e-6f;
 
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var valueFunc = new ValueFunction(nTuples);
-            valueFunc.InitWeightsWithUniformRand();
+            var valueFunc = new ValueFunction<float>(nTuples);
+            valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var pos = new Position();
             var pf = new PositionFeature(nTuples);
@@ -63,12 +64,13 @@ namespace KalmiaZero_Test.NTuple
 
             var history = new List<BoardCoordinate>();
             var passCount = 0;
-            while(passCount < 2)
+            while (passCount < 2)
             {
-                if(numMoves == 0)
+                if (numMoves == 0)
                 {
                     pos.Pass();
-                    pf.Pass();
+                    numMoves = pos.GetNextMoves(ref moves);
+                    pf.Pass(moves[..numMoves]);
                     numMoves = pos.GetNextMoves(ref moves);
                     history.Add(BoardCoordinate.Pass);
                     passCount++;
@@ -77,7 +79,7 @@ namespace KalmiaZero_Test.NTuple
 
                 passCount = 0;
                 var expected = valueFunc.PredictLogit(pf);
-                for(var i = 0; i < 3; i++)
+                for (var i = 0; i < 3; i++)
                 {
                     pos.Rotate90Clockwise();
                     for (var j = 0; j < numMoves; j++)
