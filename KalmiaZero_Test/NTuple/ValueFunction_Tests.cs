@@ -17,9 +17,36 @@ namespace KalmiaZero_Test.NTuple
         }
 
         [Test]
+        public void LoadFromFileAndSaveToFile_Test()
+        {
+            const int NUM_NTUPLES = 100;
+            const int NTUPLE_SIZE = 7;
+            var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
+            var valueFunc = new ValueFunction(nTuples);
+            valueFunc.InitWeightsWithUniformRand();
+
+            var fileName = Path.GetRandomFileName();
+            valueFunc.SaveToFile(fileName);
+            var loaded = ValueFunction.LoadFromFile(fileName);
+
+            for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
+            {
+                var expectedTuple = valueFunc.NTuples[nTupleID];
+                var actualTuple = valueFunc.NTuples[nTupleID];
+                Assert.IsTrue(expectedTuple.Coordinates.SequenceEqual(actualTuple.Coordinates));
+
+                var expectedW = valueFunc.GetWeights(DiscColor.Black, nTupleID);
+                var actualW = loaded.GetWeights(DiscColor.Black, nTupleID);
+                Assert.IsTrue(expectedW.SequenceEqual(actualW));
+            }
+
+            File.Delete(fileName);
+        }
+
+        [Test]
         public void Predict_Test()
         {
-            const int NUM_NTUPLES = 10;
+            const int NUM_NTUPLES = 100;
             const int NTUPLE_SIZE = 7;
             const float DELTA = 1.0e-3f;
 
@@ -34,7 +61,7 @@ namespace KalmiaZero_Test.NTuple
             var numMoves = pos.GetNextMoves(ref moves);
             pf.Init(ref pos, moves[..numMoves]);
 
-            var moveCount = 0;
+            var history = new List<BoardCoordinate>();
             var passCount = 0;
             while(passCount < 2)
             {
@@ -43,6 +70,7 @@ namespace KalmiaZero_Test.NTuple
                     pos.Pass();
                     pf.Pass();
                     numMoves = pos.GetNextMoves(ref moves);
+                    history.Add(BoardCoordinate.Pass);
                     passCount++;
                     continue;
                 }
@@ -82,11 +110,11 @@ namespace KalmiaZero_Test.NTuple
                 pf.Init(ref pos, moves[..numMoves]);
 
                 var move = moves[Random.Shared.Next(numMoves)];
+                history.Add(move.Coord);
                 pos.GenerateMove(ref move);
                 pos.Update(ref move);
                 numMoves = pos.GetNextMoves(ref moves);
                 pf.Update(ref move, moves[..numMoves]);
-                moveCount++;
             }
         }
     }

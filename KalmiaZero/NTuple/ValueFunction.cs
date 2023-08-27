@@ -108,6 +108,8 @@ namespace KalmiaZero.NTuple
             return valueFunc;
         }
 
+        public ReadOnlySpan<float> GetWeights(DiscColor color, int nTupleID) => this.weights[(int)color][nTupleID];
+
         public void InitWeightsWithUniformRand(float maxWeight = 0.001f) => InitWeightsWithUniformRand(Random.Shared, maxWeight);
 
         public void InitWeightsWithUniformRand(Random rand, float maxWeight)
