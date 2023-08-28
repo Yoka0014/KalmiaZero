@@ -89,29 +89,18 @@ namespace KalmiaZero.NTuple
 
         static BoardCoordinate[] InitTupleByRandomWalk(int size)
         {
-            var tuple = new List<BoardCoordinate>(size);    
-            var adjCoords = new List<BoardCoordinate>();
+            var tuple = new List<BoardCoordinate> { (BoardCoordinate)Random.Shared.Next(Constants.NUM_SQUARES) };
+            var adjCoords = Reversi.Utils.GetAdjacent8Squares(tuple[0]).ToArray().ToList();
 
-            do
+            while (tuple.Count < size)
             {
-                var coord = (BoardCoordinate)Random.Shared.Next(Constants.NUM_SQUARES);
-                while (tuple.Count < size)
-                {
-                    foreach (var adjCoord in Reversi.Utils.GetAdjacent8Squares(coord))
-                        if (!tuple.Contains(adjCoord))
-                            adjCoords.Add(adjCoord);
+                tuple.Add(adjCoords[Random.Shared.Next(adjCoords.Count)]);
+                foreach (var adjCoord in Reversi.Utils.GetAdjacent8Squares(tuple[^1]))
+                    adjCoords.Add(adjCoord);
+                adjCoords.RemoveAll(tuple.Contains);
+            }
 
-                    if (adjCoords.Count == 0)
-                        break;
-
-                    coord = adjCoords[Random.Shared.Next(adjCoords.Count)];
-                    tuple.Add(coord);
-
-                    adjCoords.Clear();
-                }
-            } while (tuple.Count < size);
-
-            return tuple.ToArray();
+            return tuple.Order().ToArray();
         }
 
         static BoardCoordinate[][] ExpandTuple(BoardCoordinate[] tuple)
