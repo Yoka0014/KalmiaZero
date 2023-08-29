@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace KalmiaZero.Utils
 {
@@ -18,6 +14,16 @@ namespace KalmiaZero.Utils
             if (swapBytes)
                 SwapBytes(buffer);
             return ret;
+        }
+
+        public static void Write(this Stream stream, byte[] buffer, int offset, int count, bool swapBytes)
+            => stream.Write(buffer.AsSpan(offset, count), swapBytes);
+
+        public static void Write(this Stream stream, Span<byte> buffer, bool swapBytes)
+        {
+            if (swapBytes)
+                SwapBytes(buffer);
+            stream.Write(buffer);
         }
 
         static void SwapBytes(Span<byte> buffer)
