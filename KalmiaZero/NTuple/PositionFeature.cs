@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 
 using KalmiaZero.Utils;
 using KalmiaZero.Reversi;
+using System.Threading.Tasks.Dataflow;
 
 namespace KalmiaZero.NTuple
 {
@@ -146,6 +147,15 @@ namespace KalmiaZero.NTuple
                     }
                 }
             }
+        }
+
+        public void CopyTo(PositionFeature dest)
+        {
+            dest.SideToMove = this.SideToMove;
+            dest.playerUpdator = this.playerUpdator;
+            dest.opponentUpdator = this.opponentUpdator;
+            for (var i = 0; i < this.NTuples.Length; i++)
+                Buffer.BlockCopy(this.features[i], 0, dest.features[i], 0, sizeof(int) * dest.features[i].Length);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

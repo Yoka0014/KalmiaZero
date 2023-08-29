@@ -11,7 +11,7 @@ namespace KalmiaZero.Engines
 {
     using MultiPV = List<MultiPVItem>;
 
-    public class MCEngine : Engine
+    internal class MCEngine : Engine
     {
         Task? simulationThread;
         CancellationTokenSource? cts;

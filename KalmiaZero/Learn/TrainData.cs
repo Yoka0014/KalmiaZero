@@ -10,14 +10,14 @@ using KalmiaZero.Reversi;
 using System.Runtime.CompilerServices;
 using KalmiaZero.GameFormats;
 
-namespace KalmiaZero.Learn
+namespace KalmiaZero.Learning
 {
     public struct TrainDataItem
     {
-        Bitboard Position { get; set; }
-        BoardCoordinate NextMove { get; set; }  
-        sbyte FinalDiscDiff { get; set; }
-        float EvalScore { get; set; }
+        public Bitboard Position { get; set; }
+        public BoardCoordinate NextMove { get; set; }  
+        public sbyte FinalDiscDiff { get; set; }
+        public float EvalScore { get; set; }
 
         public TrainDataItem(Stream stream, bool swapBytes)
         {
@@ -78,6 +78,7 @@ namespace KalmiaZero.Learn
         {
             var jouPath = Path.Combine(dir, jouFileName);
             var trnPath = Path.Combine(dir, trnFileName);
+            var trainData = new List<TrainDataItem>();
             foreach(var file in Directory.GetFiles(dir))
             {
                 if (Path.GetExtension(file) != ".wtb")
@@ -89,11 +90,19 @@ namespace KalmiaZero.Learn
                     var pos = new Position();
                     foreach(var move in game.MoveRecord)
                     {
-                        var bb = pos.GetBitboard();
-                        
+                        var item = new TrainDataItem();
+                        item.Position = pos.GetBitboard();
+                        item.NextMove = move.Coord;
+                        var discDiff = (pos.EmptySquareCount > 20) ? game.BlackDiscCount : game.BestBlackDiscCount;
+                        discDiff = 2 * discDiff - Constants.NUM_SQUARES;
+                        item.FinalDiscDiff = (pos.SideToMove == DiscColor.Black) ? (sbyte)discDiff : (sbyte)(-discDiff);
+                        item.EvalScore = float.NaN;
+                        trainData.Add(item);
                     }
                 }
             }
+
+            return trainData.ToArray();
         }
     }
 }

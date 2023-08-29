@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KalmiaZero.Learn
+namespace KalmiaZero.Learning
 {
     public class ValueFunctionOptimizer
     {

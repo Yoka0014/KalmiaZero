@@ -7,6 +7,7 @@ using KalmiaZero.GameFormats;
 using KalmiaZero.NTuple;
 using KalmiaZero.Protocols;
 using KalmiaZero.Reversi;
+using KalmiaZero.Learning;
 
 namespace KalmiaZero
 {
@@ -14,13 +15,8 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
-            for (var i = 0; i < 100; i++)
-            {
-                Console.WriteLine($"ID: {i}\n");
-
-                var nTuple = new NTupleInfo(7);
-                Console.WriteLine(nTuple);
-            }
+            var trainData = TrainData.CreateTrainDataFromWthorFile(@"C:\Users\yu_ok\source\repos\KalmiaZero\TrainData", "WTHOR.JOU", "WTHOR.TRN");
+            Console.WriteLine(trainData.Length);
         }
     }
 }
