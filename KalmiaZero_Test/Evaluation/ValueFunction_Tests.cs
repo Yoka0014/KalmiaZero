@@ -1,8 +1,8 @@
-﻿using KalmiaZero.Evaluate;
+﻿using KalmiaZero.Evaluation;
 using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
 
-namespace KalmiaZero_Test.NTuple
+namespace KalmiaZero_Test.Evaluation
 {
     public class ValueFunction_Tests
     {
@@ -14,15 +14,17 @@ namespace KalmiaZero_Test.NTuple
         [Test]
         public void LoadFromFileAndSaveToFile_Test()
         {
+            const double DELTA = 1.0e-6f;
             const int NUM_NTUPLES = 100;
             const int NTUPLE_SIZE = 7;
+
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var valueFunc = new ValueFunction<float>(nTuples);
+            var valueFunc = new ValueFunction<double>(nTuples);
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var fileName = Path.GetRandomFileName();
             valueFunc.SaveToFile(fileName);
-            var loaded = ValueFunction<float>.LoadFromFile<float>(fileName);
+            var loaded = ValueFunction<float>.LoadFromFile(fileName);
 
             for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
             {
@@ -32,7 +34,9 @@ namespace KalmiaZero_Test.NTuple
 
                 var expectedW = valueFunc.GetWeights(DiscColor.Black, nTupleID);
                 var actualW = loaded.GetWeights(DiscColor.Black, nTupleID);
-                Assert.IsTrue(expectedW.SequenceEqual(actualW));
+                Assert.AreEqual(expectedW.Length, actualW.Length);
+                for (var i = 0; i < expectedW.Length; i++)
+                    Assert.AreEqual(expectedW[i], actualW[i], DELTA);
             }
 
             File.Delete(fileName);

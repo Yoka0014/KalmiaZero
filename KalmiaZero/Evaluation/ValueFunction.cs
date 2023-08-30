@@ -10,7 +10,7 @@ using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
 using KalmiaZero.Utils;
 
-namespace KalmiaZero.Evaluate
+namespace KalmiaZero.Evaluation
 {
     using static PositionFeaturesConstantConfig;
 
@@ -53,8 +53,7 @@ namespace KalmiaZero.Evaluate
             }
         }
 
-        public static ValueFunction<WeightType> LoadFromFile<SrcWeightType>(string filePath)
-            where SrcWeightType : IFloatingPointIeee754<SrcWeightType>
+        public static ValueFunction<WeightType> LoadFromFile(string filePath)
         {
             const int BUFFER_SIZE = 16;
 
@@ -86,9 +85,8 @@ namespace KalmiaZero.Evaluate
             // load weights
             fs.Read(buffer[..sizeof(int)], swapBytes);
             var weightSize = BitConverter.ToInt32(buffer);
-
-            if (weightSize != Marshal.SizeOf<SrcWeightType>())
-                throw new InvalidDataException($"The size of weight type is invalid.");
+            if (weightSize != 2 && weightSize != 4 && weightSize != 8)
+                throw new InvalidDataException($"The size {weightSize} is invalid for weight.");
 
             var packedWeights = new WeightType[nTuples.Length][];
             for (var nTupleID = 0; nTupleID < packedWeights.Length; nTupleID++)
@@ -98,14 +96,13 @@ namespace KalmiaZero.Evaluate
                 var pw = packedWeights[nTupleID] = new WeightType[size];
                 for (var i = 0; i < pw.Length; i++)
                 {
-                    fs.Read(buffer[..Marshal.SizeOf<SrcWeightType>()], swapBytes);
-                    SrcWeightType w;
-                    if (typeof(SrcWeightType) == typeof(Half) && BitConverter.ToHalf(buffer) is SrcWeightType hw)
-                        pw[i] = CastWeightType<SrcWeightType, WeightType>(hw);
-                    else if (typeof(SrcWeightType) == typeof(float) && BitConverter.ToSingle(buffer) is SrcWeightType fw)
-                        pw[i] = CastWeightType<SrcWeightType, WeightType>(fw);
-                    else if (typeof(SrcWeightType) == typeof(double) && BitConverter.ToDouble(buffer) is SrcWeightType dw)
-                        pw[i] = CastWeightType<SrcWeightType, WeightType>(dw);
+                    fs.Read(buffer[..weightSize], swapBytes);
+                    if (weightSize == 2)
+                        pw[i] = CastToWeightType(BitConverter.ToHalf(buffer));
+                    else if (weightSize == 4)
+                        pw[i] = CastToWeightType(BitConverter.ToSingle(buffer));
+                    else if (weightSize == 8)
+                        pw[i] = CastToWeightType(BitConverter.ToDouble(buffer));
                 }
             }
 
@@ -311,34 +308,33 @@ namespace KalmiaZero.Evaluate
             return weights;
         }
 
-        static DestWeightType CastWeightType<SrcWeightType, DestWeightType>(SrcWeightType sw)
-            where SrcWeightType : IFloatingPointIeee754<SrcWeightType> where DestWeightType : IFloatingPointIeee754<DestWeightType>
+        static WeightType CastToWeightType<SrcWeightType>(SrcWeightType sw) where SrcWeightType : IFloatingPointIeee754<SrcWeightType>
         {
-            if (sw is DestWeightType ret)
+            if (sw is WeightType ret)
                 return ret;
 
             if (sw is Half hsw)
             {
-                if (typeof(DestWeightType) == typeof(float) && (float)hsw is DestWeightType fdw)
+                if (typeof(WeightType) == typeof(float) && (float)hsw is WeightType fdw)
                     return fdw;
 
-                if (typeof(DestWeightType) == typeof(double) && (float)hsw is DestWeightType ddw)
+                if (typeof(WeightType) == typeof(double) && (float)hsw is WeightType ddw)
                     return ddw;
             }
             else if (sw is float fsw)
             {
-                if (typeof(DestWeightType) == typeof(Half) && (Half)fsw is DestWeightType hdw)
+                if (typeof(WeightType) == typeof(Half) && (Half)fsw is WeightType hdw)
                     return hdw;
 
-                if (typeof(DestWeightType) == typeof(double) && (float)fsw is DestWeightType ddw)
+                if (typeof(WeightType) == typeof(double) && (float)fsw is WeightType ddw)
                     return ddw;
             }
             else if (sw is double dsw)
             {
-                if (typeof(DestWeightType) == typeof(Half) && (Half)dsw is DestWeightType hdw)
+                if (typeof(WeightType) == typeof(Half) && (Half)dsw is WeightType hdw)
                     return hdw;
 
-                if (typeof(DestWeightType) == typeof(float) && (float)dsw is DestWeightType fdw)
+                if (typeof(WeightType) == typeof(float) && (float)dsw is WeightType fdw)
                     return fdw;
             }
 

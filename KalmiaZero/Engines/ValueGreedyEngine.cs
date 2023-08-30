@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 
-using KalmiaZero.Evaluate;
+using KalmiaZero.Evaluation;
 using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
 
