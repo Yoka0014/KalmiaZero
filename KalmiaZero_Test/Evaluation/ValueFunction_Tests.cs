@@ -45,7 +45,7 @@ namespace KalmiaZero_Test.Evaluation
         [Test]
         public void Predict_Test()
         {
-            const int NUM_NTUPLES = 10;
+            const int NUM_NTUPLES = 100;
             const int NTUPLE_SIZE = 7;
             const float DELTA = 1.0e-6f;
 

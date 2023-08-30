@@ -81,6 +81,7 @@ namespace KalmiaZero.Learning
             var trainData = new List<TrainDataItem>();
             foreach(var file in Directory.GetFiles(dir))
             {
+                Console.WriteLine(file);
                 if (Path.GetExtension(file) != ".wtb")
                     continue;
 
@@ -93,7 +94,7 @@ namespace KalmiaZero.Learning
                         var item = new TrainDataItem();
                         item.Position = pos.GetBitboard();
                         item.NextMove = move.Coord;
-                        var discDiff = (pos.EmptySquareCount > 20) ? game.BlackDiscCount : game.BestBlackDiscCount;
+                        var discDiff = (pos.EmptySquareCount > wthor.WtbHeader.Depth) ? game.BlackDiscCount : game.BestBlackDiscCount;
                         discDiff = 2 * discDiff - Constants.NUM_SQUARES;
                         item.FinalDiscDiff = (pos.SideToMove == DiscColor.Black) ? (sbyte)discDiff : (sbyte)(-discDiff);
                         item.EvalScore = float.NaN;

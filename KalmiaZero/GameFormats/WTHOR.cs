@@ -182,21 +182,25 @@ namespace KalmiaZero.GameFormats
         void LoadPlayersAndTornaments(string jouPath, string trnPath, out string[] players, out string[] tornaments)
         {
             var swapBytes = !BitConverter.IsLittleEndian;
-            var recordNum = this.JouHeader.NumberOfRecords;
-            players = new string[recordNum];
-            tornaments = new string[recordNum];
+            players = new string[this.JouHeader.NumberOfRecords];
+            tornaments = new string[this.TrnHeader.NumberOfRecords];
             Span<byte> playerNameBytes = stackalloc byte[PLAYER_NAME_SIZE];
             Span<byte> tornamentNameBytes = stackalloc byte[TORNAMENT_NAME_SIZE];
             var encoding = Encoding.GetEncoding(CHAR_ENCODING);
+
             using var jouFs = new FileStream(jouPath, FileMode.Open, FileAccess.Read);
-            using var trnFs = new FileStream(trnPath, FileMode.Open, FileAccess.Read);
             jouFs.Seek(WTHORHeader.SIZE, SeekOrigin.Begin);
-            trnFs.Seek(WTHORHeader.SIZE, SeekOrigin.Begin);
             for (var i = 0; i < this.JouHeader.NumberOfRecords; i++)
             {
                 jouFs.Read(playerNameBytes, swapBytes);
-                trnFs.Read(tornamentNameBytes, swapBytes);
                 players[i] = encoding.GetString(playerNameBytes);
+            }
+
+            using var trnFs = new FileStream(trnPath, FileMode.Open, FileAccess.Read);
+            trnFs.Seek(WTHORHeader.SIZE, SeekOrigin.Begin);
+            for (var i = 0; i < this.TrnHeader.NumberOfRecords; i++)
+            {
+                trnFs.Read(tornamentNameBytes, swapBytes);
                 tornaments[i] = encoding.GetString(tornamentNameBytes);
             }
         }
@@ -220,33 +224,51 @@ namespace KalmiaZero.GameFormats
                 var whitePlayerName = this.Players[BitConverter.ToUInt16(buffer[..sizeof(ushort)])];
 
                 gameRecords[i] = new WTHORGameRecord(tornamentName, blackPlayerName, whitePlayerName,
-                                                     wtbFs.ReadByte(), wtbFs.ReadByte(), CreateMoveRecord(new BinaryReader(wtbFs)));
+                                                     wtbFs.ReadByte(), wtbFs.ReadByte(), CreateMoveRecord(wtbPath, wtbFs));
             }
 
             return gameRecords;
         }
 
-        static List<Move> CreateMoveRecord(BinaryReader br)
+        static List<Move> CreateMoveRecord(string wtbPath, Stream stream)
         {
+            const int MAX_MOVE_RECORD_SIZE = 60;
             var moveRecord = new List<Move>();
             var pos = new Position();
 
-            while(br.PeekChar() != -1)
+            var count = 0;
+            while(stream.Position != stream.Length)
             {
-                var d = br.ReadByte();
-                if (d == 0)
+                if (++count > MAX_MOVE_RECORD_SIZE)
                     break;
 
+                var d = stream.ReadByte();
+                if (d == 0)
+                {
+                    while (count++ < 60)
+                        stream.ReadByte();
+                    break;
+                }
+
                 if (pos.CanPass)     // because pass is not described in WTHOR file, check if current board can be passed
-                                                                           // and if so add pass to move record.
+                                     // and if so add pass to move record.
                 {
                     pos.Pass();
                     moveRecord.Add(new Move(BoardCoordinate.Pass));
                 }
 
-                var move = new Move(Reversi.Utils.Coordinate2DTo1D(d % 10 - 1, d / 10 - 1));
+                Move move;
+                try
+                {
+                    move = new Move(Reversi.Utils.Coordinate2DTo1D(d % 10 - 1, d / 10 - 1));
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    throw new InvalidDataException($"Wtb file \"{wtbPath}\" contains an invalid move data: {d}");
+                }
+
                 if (!pos.IsLegalMoveAt(move.Coord))
-                    throw new InvalidDataException("This wtb file contains an invalid move.");
+                    throw new InvalidDataException($"Wtb file \"{wtbPath}\" contains an invalid move.");
 
                 pos.GenerateMove(ref move);
                 pos.Update(ref move);
