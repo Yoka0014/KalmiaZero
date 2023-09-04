@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Text;
 
 using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
@@ -12,15 +12,15 @@ using KalmiaZero.Utils;
 
 namespace KalmiaZero.Evaluation
 {
-    using static PositionFeaturesConstantConfig;
-
-    public class ValueFunction<WeightType> where WeightType : IFloatingPointIeee754<WeightType>
+    public class ValueFunction<WeightType> where WeightType : struct, IFloatingPointIeee754<WeightType>
     {
         const string LABEL = "KalmiaZero";
         const string LABEL_INVERSED = "oreZaimlaK";
         const int LABEL_SIZE = 10;
 
         public NTuples NTuples { get; }
+        public WeightType Bias { get; set; }
+
         readonly WeightType[][][] weights = new WeightType[2][][];     // weights[DiscColor][nTupleID][feature]
 
         public ValueFunction(NTuples nTuples)
@@ -33,8 +33,20 @@ namespace KalmiaZero.Evaluation
                 for (var nTupleID = 0; nTupleID < w.Length; nTupleID++)
                     w[nTupleID] = new WeightType[this.NTuples.NumPossibleFeatures[nTupleID]];
             }
+
+            this.Bias = WeightType.Zero;
         }
 
+        /*
+         * Format:
+         * 
+         * offset = 0:  label(for endianess check)
+         * offset = 10: the number of N-Tuples
+         * offset = 14: N-Tuple's coordinates
+         * offset = M: the size of weight
+         * offset = M + 4: weights
+         * offset = -1: bias
+         */
         public static ValueFunction<WeightType> LoadFromFile(string filePath)
         {
             const int BUFFER_SIZE = 16;
@@ -88,6 +100,14 @@ namespace KalmiaZero.Evaluation
                 }
             }
 
+            fs.Read(buffer[..weightSize], swapBytes); 
+            if (weightSize == 2)
+                valueFunc.Bias = CastToWeightType(BitConverter.ToHalf(buffer));
+            else if (weightSize == 4)
+                valueFunc.Bias = CastToWeightType(BitConverter.ToSingle(buffer));
+            else if (weightSize == 8)
+                valueFunc.Bias = CastToWeightType(BitConverter.ToDouble(buffer));
+
             // expand weights
             valueFunc.weights[(int)DiscColor.Black] = valueFunc.ExpandPackedWeights(packedWeights);
             valueFunc.CopyWeightsBlackToWhite();
@@ -123,6 +143,8 @@ namespace KalmiaZero.Evaluation
                 }
             }
             CopyWeightsBlackToWhite();
+
+            this.Bias = WeightType.Zero;
         }
 
         public void CopyWeightsBlackToWhite()
@@ -144,16 +166,16 @@ namespace KalmiaZero.Evaluation
         {
             WeightType[][] weights = this.weights[(int)posFeature.SideToMove];
 
-            var logit = WeightType.Zero;
+            var x = WeightType.Zero;
             for (var nTupleID = 0; nTupleID < weights.Length; nTupleID++)
             {
                 var w = weights[nTupleID];
                 ReadOnlySpan<int> features = posFeature.GetFeatures(nTupleID);
                 for (var i = 0; i < features.Length; i++)
-                    logit += w[features[i]];
+                    x += w[features[i]];
             }
 
-            return logit;
+            return x + this.Bias;
         }
 
         public WeightType Predict(PositionFeatureVector pf) => StdSigmoid(PredictLogit(pf));
@@ -166,6 +188,7 @@ namespace KalmiaZero.Evaluation
          * offset = 14: N-Tuple's coordinates
          * offset = M: the size of weight
          * offset = M + 4: weights
+         * offset = -1: bias
          */
         public void SaveToFile(string filePath)
         {
@@ -202,6 +225,13 @@ namespace KalmiaZero.Evaluation
                         fs.Write(BitConverter.GetBytes(dv));
                 }
             }
+
+            if (this.Bias is Half hb)
+                fs.Write(BitConverter.GetBytes(hb));
+            else if (this.Bias is float fb)
+                fs.Write(BitConverter.GetBytes(fb));
+            else if (this.Bias is double db)
+                fs.Write(BitConverter.GetBytes(db));
         }
 
         WeightType[][] PackWeights()

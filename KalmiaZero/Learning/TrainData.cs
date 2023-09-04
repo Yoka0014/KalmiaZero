@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 using KalmiaZero.Utils;
 using KalmiaZero.Reversi;
-using System.Runtime.CompilerServices;
 using KalmiaZero.GameFormats;
 
 namespace KalmiaZero.Learning

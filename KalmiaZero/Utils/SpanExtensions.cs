@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -38,5 +39,15 @@ namespace KalmiaZero.Utils
                     return i;
             return -1;
         }
+
+        public static T Sum<T>(this Span<T> span) where T : INumber<T>
+        {
+            var sum = T.Zero;
+            foreach(var n in span)
+                sum += n;
+            return sum;
+        }
+
+        public static T Sum<T>(this T[] array) where T: INumber<T> => array.AsSpan().Sum();
     }
 }
