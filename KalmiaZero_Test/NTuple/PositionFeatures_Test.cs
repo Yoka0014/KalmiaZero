@@ -16,9 +16,10 @@ namespace KalmiaZero_Test.NTuple
             const int NUM_NTUPLES = 100;
             const int NTUPLE_SIZE = 7;
 
-            var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var expectedPf = new PositionFeature(nTuples);
-            var actualPf = new PositionFeature(nTuples);   
+            var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
+            var nTuples = new NTuples(tuples);
+            var expectedPf = new PositionFeatureVector(nTuples);
+            var actualPf = new PositionFeatureVector(nTuples);   
 
             var pos = new Position();
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];

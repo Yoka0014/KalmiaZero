@@ -20,36 +20,18 @@ namespace KalmiaZero.Evaluation
         const string LABEL_INVERSED = "oreZaimlaK";
         const int LABEL_SIZE = 10;
 
-        public ReadOnlySpan<NTupleInfo> NTuples => N_TUPLES;
-
-        readonly NTupleInfo[] N_TUPLES;
+        public NTuples NTuples { get; }
         readonly WeightType[][][] weights = new WeightType[2][][];     // weights[DiscColor][nTupleID][feature]
 
-        readonly int[] POW_TABLE;
-        readonly int[] NUM_POSSIBLE_FEATURES;   // NUM_POSSIBLE_FEATURES[nTupleID]
-        readonly int[][] TO_OPPONENT_FEATURE;   // TO_OPPONENT_FEATURE[nTupleID][feature]
-        readonly int[][] MIRROR_FEATURE;    // MIRROR_FEATURE[nTupleID][feature]
-
-        public ValueFunction(NTupleInfo[] nTuples)
+        public ValueFunction(NTuples nTuples)
         {
-            N_TUPLES = (from n in nTuples select new NTupleInfo(n)).ToArray();
-
-            POW_TABLE = new int[nTuples.Max(x => x.Size) + 1];
-            InitPowTable();
-
-            NUM_POSSIBLE_FEATURES = (from n in nTuples select POW_TABLE[n.Size]).ToArray();
-
-            TO_OPPONENT_FEATURE = (from n in NUM_POSSIBLE_FEATURES select new int[n]).ToArray();
-            InitOpponentFeatureTable();
-
-            MIRROR_FEATURE = (from n in NUM_POSSIBLE_FEATURES select new int[n]).ToArray();
-            InitMirroredFeatureTable();
+            this.NTuples = nTuples;
 
             for (var color = 0; color < 2; color++)
             {
-                var w = weights[color] = new WeightType[nTuples.Length][];
-                for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
-                    w[nTupleID] = new WeightType[NUM_POSSIBLE_FEATURES[nTupleID]];
+                var w = weights[color] = new WeightType[this.NTuples.Length][];
+                for (var nTupleID = 0; nTupleID < w.Length; nTupleID++)
+                    w[nTupleID] = new WeightType[this.NTuples.NumPossibleFeatures[nTupleID]];
             }
         }
 
@@ -80,7 +62,7 @@ namespace KalmiaZero.Evaluation
                 nTuples[i] = new NTupleInfo(coords);
             }
 
-            var valueFunc = new ValueFunction<WeightType>(nTuples);
+            var valueFunc = new ValueFunction<WeightType>(new NTuples(nTuples));
 
             // load weights
             fs.Read(buffer[..sizeof(int)], swapBytes);
@@ -113,18 +95,18 @@ namespace KalmiaZero.Evaluation
             return valueFunc;
         }
 
-        public ReadOnlySpan<WeightType> GetWeights(DiscColor color, int nTupleID) => weights[(int)color][nTupleID];
+        public WeightType[] GetWeights(DiscColor color, int nTupleID) => weights[(int)color][nTupleID];
 
         public void InitWeightsWithUniformRand(WeightType min, WeightType max) => InitWeightsWithUniformRand(Random.Shared, min, max);
 
         public void InitWeightsWithUniformRand(Random rand, WeightType min, WeightType max)
         {
             WeightType[][] bWeights = weights[(int)DiscColor.Black];
-            for (var nTupleID = 0; nTupleID < N_TUPLES.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
             {
                 var bw = bWeights[nTupleID];
-                int[] mirror = MIRROR_FEATURE[nTupleID];
-                for (var feature = 0; feature < NUM_POSSIBLE_FEATURES[nTupleID]; feature++)
+                ReadOnlySpan<int> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
                 {
                     var mirrored = mirror[feature];
                     if (feature <= mirrored)
@@ -148,17 +130,17 @@ namespace KalmiaZero.Evaluation
             WeightType[][] bWeights = weights[(int)DiscColor.Black];
             WeightType[][] wWeights = weights[(int)DiscColor.White];
 
-            for (var nTupleID = 0; nTupleID < N_TUPLES.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
             {
                 var bw = bWeights[nTupleID];
                 var ww = wWeights[nTupleID];
-                int[] toOpponent = TO_OPPONENT_FEATURE[nTupleID];
-                for (var feature = 0; feature < NUM_POSSIBLE_FEATURES[nTupleID]; feature++)
+                ReadOnlySpan<int> toOpponent = this.NTuples.GetOpponentFeatureTable(nTupleID);
+                for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
                     ww[feature] = bw[toOpponent[feature]];
             }
         }
 
-        public WeightType PredictLogit(PositionFeature posFeature)
+        public WeightType PredictLogit(PositionFeatureVector posFeature)
         {
             WeightType[][] weights = this.weights[(int)posFeature.SideToMove];
 
@@ -174,7 +156,7 @@ namespace KalmiaZero.Evaluation
             return logit;
         }
 
-        public WeightType Predict(PositionFeature pf) => StdSigmoid(PredictLogit(pf));
+        public WeightType Predict(PositionFeatureVector pf) => StdSigmoid(PredictLogit(pf));
 
         /*
          * Format:
@@ -191,10 +173,11 @@ namespace KalmiaZero.Evaluation
             fs.Write(Encoding.ASCII.GetBytes(LABEL), 0, LABEL_SIZE);
 
             // save N-Tuples
-            fs.Write(BitConverter.GetBytes(N_TUPLES.Length));
-            for (var nTupleID = 0; nTupleID < N_TUPLES.Length; nTupleID++)
+            ReadOnlySpan<NTupleInfo> tuples = this.NTuples.Tuples;
+            fs.Write(BitConverter.GetBytes(tuples.Length));
+            for (var nTupleID = 0; nTupleID < tuples.Length; nTupleID++)
             {
-                var coords = N_TUPLES[nTupleID].Coordinates[0];
+                var coords = tuples[nTupleID].GetCoordinates(0);
                 fs.Write(BitConverter.GetBytes(coords.Length));
                 foreach (var coord in coords)
                     fs.WriteByte((byte)coord);
@@ -221,68 +204,15 @@ namespace KalmiaZero.Evaluation
             }
         }
 
-        void InitPowTable()
-        {
-            POW_TABLE[0] = 1;
-            for (var i = 1; i < POW_TABLE.Length; i++)
-                POW_TABLE[i] = POW_TABLE[i - 1] * NUM_SQUARE_STATES;
-        }
-
-        void InitOpponentFeatureTable()
-        {
-            for (var nTupleID = 0; nTupleID < TO_OPPONENT_FEATURE.Length; nTupleID++)
-            {
-                ref NTupleInfo nTuple = ref N_TUPLES[nTupleID];
-                var table = TO_OPPONENT_FEATURE[nTupleID] = new int[NUM_POSSIBLE_FEATURES[nTupleID]];
-                for (var feature = 0; feature < table.Length; feature++)
-                {
-                    var oppFeature = 0;
-                    for (var i = 0; i < nTuple.Size; i++)
-                    {
-                        var state = feature / POW_TABLE[i] % NUM_SQUARE_STATES;
-                        if (state == UNREACHABLE_EMPTY || state == REACHABLE_EMPTY)
-                            oppFeature += state * POW_TABLE[i];
-                        else
-                            oppFeature += (int)Reversi.Utils.ToOpponentColor((DiscColor)state) * POW_TABLE[i];
-                    }
-                    table[feature] = oppFeature;
-                }
-            }
-        }
-
-        void InitMirroredFeatureTable()
-        {
-            for (var nTupleID = 0; nTupleID < TO_OPPONENT_FEATURE.Length; nTupleID++)
-            {
-                ref NTupleInfo nTuple = ref N_TUPLES[nTupleID];
-                var shuffleTable = nTuple.MirrorTable;
-
-                if (shuffleTable.Length == 0)
-                {
-                    MIRROR_FEATURE[nTupleID] = Enumerable.Range(0, NUM_POSSIBLE_FEATURES[nTupleID]).ToArray();
-                    continue;
-                }
-
-                var table = MIRROR_FEATURE[nTupleID] = new int[NUM_POSSIBLE_FEATURES[nTupleID]];
-                for (var feature = 0; feature < table.Length; feature++)
-                {
-                    var mirroredFeature = 0;
-                    for (var i = 0; i < nTuple.Size; i++)
-                        mirroredFeature += feature / POW_TABLE[nTuple.Size - shuffleTable[i] - 1] % NUM_SQUARE_STATES * POW_TABLE[nTuple.Size - i - 1];
-                    table[feature] = mirroredFeature;
-                }
-            }
-        }
-
         WeightType[][] PackWeights()
         {
             WeightType[][] weights = this.weights[(int)DiscColor.Black];
             var packedWeights = (from _ in Enumerable.Range(0, weights.Length) select new List<WeightType>()).ToArray();
-            for (var nTupleID = 0; nTupleID < N_TUPLES.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
             {
                 var w = weights[nTupleID];
                 var pw = packedWeights[nTupleID];
-                int[] mirror = MIRROR_FEATURE[nTupleID];
+                ReadOnlySpan<int> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 for (var feature = 0; feature < w.Length; feature++)
                     if (feature <= mirror[feature])
                         pw.Add(w[feature]);
@@ -292,12 +222,12 @@ namespace KalmiaZero.Evaluation
 
         WeightType[][] ExpandPackedWeights(WeightType[][] packedWeights)
         {
-            var weights = new WeightType[N_TUPLES.Length][];
-            for (var nTupleID = 0; nTupleID < N_TUPLES.Length; nTupleID++)
+            var weights = new WeightType[this.NTuples.Length][];
+            for (var nTupleID = 0; nTupleID < weights.Length; nTupleID++)
             {
-                var w = weights[nTupleID] = new WeightType[NUM_POSSIBLE_FEATURES[nTupleID]];
+                var w = weights[nTupleID] = new WeightType[this.NTuples.NumPossibleFeatures[nTupleID]];
                 var pw = packedWeights[nTupleID];
-                int[] mirror = MIRROR_FEATURE[nTupleID];
+                ReadOnlySpan<int> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 var i = 0;
                 for (var feature = 0; feature < w.Length; feature++)
                 {

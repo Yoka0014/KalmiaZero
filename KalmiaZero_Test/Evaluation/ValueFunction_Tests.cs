@@ -19,7 +19,7 @@ namespace KalmiaZero_Test.Evaluation
             const int NTUPLE_SIZE = 7;
 
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var valueFunc = new ValueFunction<double>(nTuples);
+            var valueFunc = new ValueFunction<double>(new NTuples(nTuples));
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var fileName = Path.GetRandomFileName();
@@ -28,9 +28,9 @@ namespace KalmiaZero_Test.Evaluation
 
             for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
             {
-                var expectedTuple = valueFunc.NTuples[nTupleID];
-                var actualTuple = valueFunc.NTuples[nTupleID];
-                Assert.IsTrue(expectedTuple.Coordinates.SequenceEqual(actualTuple.Coordinates));
+                var expectedTuple = valueFunc.NTuples.Tuples[nTupleID];
+                var actualTuple = valueFunc.NTuples.Tuples[nTupleID];
+                Assert.IsTrue(expectedTuple.GetCoordinates(0).SequenceEqual(actualTuple.GetCoordinates(0)));
 
                 var expectedW = valueFunc.GetWeights(DiscColor.Black, nTupleID);
                 var actualW = loaded.GetWeights(DiscColor.Black, nTupleID);
@@ -49,12 +49,13 @@ namespace KalmiaZero_Test.Evaluation
             const int NTUPLE_SIZE = 7;
             const float DELTA = 1.0e-6f;
 
-            var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
+            var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
+            var nTuples = new NTuples(tuples);
             var valueFunc = new ValueFunction<float>(nTuples);
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var pos = new Position();
-            var pf = new PositionFeature(nTuples);
+            var pf = new PositionFeatureVector(nTuples);
             Span<Move> moves = stackalloc Move[Constants.NUM_SQUARES];
 
             var numMoves = pos.GetNextMoves(ref moves);

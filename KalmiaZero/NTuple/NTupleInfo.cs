@@ -1,53 +1,57 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 using KalmiaZero.Reversi;
 
 namespace KalmiaZero.NTuple
 {
+    using static PositionFeaturesConstantConfig;
+
     public readonly struct NTupleInfo
     {
-        /// <summary>
-        /// Coordinates that compose N-Tuple containing symmetric expansions.
-        /// </summary>
-        public BoardCoordinate[][] Coordinates { get; }
-
         /// <summary>
         /// Mirrored order of coordinates that compose N-Tuple. The mirroring axis depends on the shape of N-Tuple.
         /// If there is no mirroring axis, MirrorTable is int[0].
         /// </summary>
-        public int[] MirrorTable { get; }
+        public ReadOnlySpan<int> MirrorTable => this.MIRROR_TABLE;
 
-        public int Size => this.Coordinates[0].Length;
+        readonly BoardCoordinate[][] COORDINATES;
+        readonly int[] MIRROR_TABLE;
+
+        public int Size => this.COORDINATES[0].Length;
+        public int NumSymmetricExpansions => this.COORDINATES.Length;
 
         public NTupleInfo(int size)
         {
-            this.Coordinates = ExpandTuple(InitTupleByRandomWalk(size));
-            var coords = this.Coordinates[0];
-            this.MirrorTable = (from coord in MirrorTuple(coords) select Array.IndexOf(coords, coord)).ToArray();
+            this.COORDINATES = ExpandTuple(InitTupleByRandomWalk(size));
+            var coords = this.COORDINATES[0];
+            this.MIRROR_TABLE = (from coord in MirrorTuple(coords) select Array.IndexOf(coords, coord)).ToArray();
         }
 
         public NTupleInfo(BoardCoordinate[] coords)
         {
-            this.Coordinates = ExpandTuple(coords);
-            this.MirrorTable = (from coord in MirrorTuple(coords) select Array.IndexOf(coords, coord)).ToArray();
+            this.COORDINATES = ExpandTuple(coords);
+            this.MIRROR_TABLE = (from coord in MirrorTuple(coords) select Array.IndexOf(coords, coord)).ToArray();
         }
 
         public NTupleInfo(NTupleInfo nTuple)
         {
-            this.Coordinates = new BoardCoordinate[nTuple.Coordinates.Length][];
-            for(var i = 0; i < this.Coordinates.Length; i++)
+            this.COORDINATES = new BoardCoordinate[nTuple.COORDINATES.Length][];
+            for(var i = 0; i < this.COORDINATES.Length; i++)
             {
-                var srcTuple = nTuple.Coordinates[i];
-                var destTuple = this.Coordinates[i] = new BoardCoordinate[srcTuple.Length];
+                var srcTuple = nTuple.COORDINATES[i];
+                var destTuple = this.COORDINATES[i] = new BoardCoordinate[srcTuple.Length];
                 Buffer.BlockCopy(srcTuple, 0, destTuple, 0, sizeof(BoardCoordinate) * destTuple.Length);
             }
 
-            this.MirrorTable = new int[nTuple.MirrorTable.Length];
-            Buffer.BlockCopy(nTuple.MirrorTable, 0, this.MirrorTable, 0, sizeof(int) * this.MirrorTable.Length);
+            this.MIRROR_TABLE = new int[nTuple.MIRROR_TABLE.Length];
+            Buffer.BlockCopy(nTuple.MIRROR_TABLE, 0, this.MIRROR_TABLE, 0, sizeof(int) * this.MIRROR_TABLE.Length);
         }
+
+        public ReadOnlySpan<BoardCoordinate> GetCoordinates(int idx) => this.COORDINATES[idx];
 
         public byte[] ToBytes()
         {
@@ -55,14 +59,14 @@ namespace KalmiaZero.NTuple
             var buffer = new byte[sizeof(int) + this.Size];
             Buffer.BlockCopy(size, 0, buffer, 0, size.Length);
             for (var i = sizeof(int); i < buffer.Length; i++)
-                buffer[i] = (byte)this.Coordinates[0][i - sizeof(int)];
+                buffer[i] = (byte)this.COORDINATES[0][i - sizeof(int)];
             return buffer;
         }
 
         public override readonly string ToString()
         {
             var sb = new StringBuilder();
-            foreach (var tuple in this.Coordinates)
+            foreach (var tuple in this.COORDINATES)
             {
                 sb.Append("  ");
                 for (var i = 0; i < Constants.BOARD_SIZE; i++)
@@ -160,6 +164,92 @@ namespace KalmiaZero.NTuple
                     mirrored[i] = table[(int)tuple[i]];
 
                 return mirrored.Order().SequenceEqual(tuple.Order());
+            }
+        }
+    }
+
+    public readonly struct NTuples
+    {
+        public ReadOnlySpan<NTupleInfo> Tuples => this.TUPLES;
+        public int Length => this.TUPLES.Length;
+        public ReadOnlySpan<int> NumPossibleFeatures => this.NUM_POSSIBLE_FEATURES;
+        public ReadOnlySpan<int> PowTable => this.POW_TABLE;
+
+        readonly NTupleInfo[] TUPLES;
+        readonly int[] POW_TABLE;
+        readonly int[] NUM_POSSIBLE_FEATURES;
+        readonly int[][] TO_OPPONENT_FEATURE;
+        readonly int[][] TO_MIRRORED_FEATURE;
+
+        public Span<int> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
+        public Span<int> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
+
+        public NTuples(Span<NTupleInfo> tuples)
+        {
+            this.TUPLES = tuples.ToArray();
+
+            var powTable = this.POW_TABLE = new int[this.TUPLES.Max(x => x.Size) + 1];
+            InitPowTable();
+
+            this.NUM_POSSIBLE_FEATURES = this.TUPLES.Select(x => powTable[x.Size]).ToArray();
+
+            this.TO_OPPONENT_FEATURE = new int[this.TUPLES.Length][];
+            InitOpponentFeatureTable();
+
+            this.TO_MIRRORED_FEATURE = new int[this.TUPLES.Length][];
+            InitMirroredFeatureTable();
+        }
+
+        void InitPowTable()
+        {
+            POW_TABLE[0] = 1;
+            for (var i = 1; i < POW_TABLE.Length; i++)
+                POW_TABLE[i] = POW_TABLE[i - 1] * NUM_SQUARE_STATES;
+        }
+
+        void InitOpponentFeatureTable()
+        {
+            for (var nTupleID = 0; nTupleID < TO_OPPONENT_FEATURE.Length; nTupleID++)
+            {
+                ref NTupleInfo nTuple = ref this.TUPLES[nTupleID];
+                var table = TO_OPPONENT_FEATURE[nTupleID] = new int[NUM_POSSIBLE_FEATURES[nTupleID]];
+                for (var feature = 0; feature < table.Length; feature++)
+                {
+                    var oppFeature = 0;
+                    for (var i = 0; i < nTuple.Size; i++)
+                    {
+                        var state = feature / POW_TABLE[i] % NUM_SQUARE_STATES;
+                        if (state == UNREACHABLE_EMPTY || state == REACHABLE_EMPTY)
+                            oppFeature += state * POW_TABLE[i];
+                        else
+                            oppFeature += (int)Reversi.Utils.ToOpponentColor((DiscColor)state) * POW_TABLE[i];
+                    }
+                    table[feature] = oppFeature;
+                }
+            }
+        }
+
+        void InitMirroredFeatureTable()
+        {
+            for (var nTupleID = 0; nTupleID < this.TO_MIRRORED_FEATURE.Length; nTupleID++)
+            {
+                ref NTupleInfo nTuple = ref this.TUPLES[nTupleID];
+                var shuffleTable = nTuple.MirrorTable;
+
+                if (shuffleTable.Length == 0)
+                {
+                    this.TO_MIRRORED_FEATURE[nTupleID] = Enumerable.Range(0, NUM_POSSIBLE_FEATURES[nTupleID]).ToArray();
+                    continue;
+                }
+
+                var table = this.TO_MIRRORED_FEATURE[nTupleID] = new int[NUM_POSSIBLE_FEATURES[nTupleID]];
+                for (var feature = 0; feature < table.Length; feature++)
+                {
+                    var mirroredFeature = 0;
+                    for (var i = 0; i < nTuple.Size; i++)
+                        mirroredFeature += feature / POW_TABLE[nTuple.Size - shuffleTable[i] - 1] % NUM_SQUARE_STATES * POW_TABLE[nTuple.Size - i - 1];
+                    table[feature] = mirroredFeature;
+                }
             }
         }
     }

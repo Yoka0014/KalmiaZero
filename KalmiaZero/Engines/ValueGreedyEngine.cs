@@ -13,7 +13,7 @@ namespace KalmiaZero.Engines
 
     internal class ValueGreedyEngine : Engine
     {
-        PositionFeature? posFeatures;
+        PositionFeatureVector? posFeatures;
         ValueFunction<Half>? valueFunc;
 
         public ValueGreedyEngine() : base("ValueGreedyEngine", "0.0", "Yoka346")
@@ -46,7 +46,7 @@ namespace KalmiaZero.Engines
             }
 
             var pos = this.Position;
-            var pf = new PositionFeature(this.posFeatures);
+            var pf = new PositionFeatureVector(this.posFeatures);
             Span<Move> legalMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
             Span<Half> values = stackalloc Half[nextMoves.Length];
             for(var i = 0; i < values.Length; i++)
@@ -103,7 +103,7 @@ namespace KalmiaZero.Engines
             try
             {
                 this.valueFunc = ValueFunction<Half>.LoadFromFile(e.ToString());
-                this.posFeatures = new PositionFeature(this.valueFunc.NTuples.ToArray());
+                this.posFeatures = new PositionFeatureVector(this.valueFunc.NTuples);
             }
             catch (Exception ex)
             {

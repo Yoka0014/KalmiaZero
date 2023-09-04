@@ -16,5 +16,27 @@ namespace KalmiaZero.Utils
                     return true;
             return false;
         }
+
+        public static T Max<T>(this ReadOnlySpan<T> span) where T : IComparable<T> => span.Max(x => x);
+
+        public static TResult Max<TSource, TResult>(this ReadOnlySpan<TSource> span, Func<TSource, TResult> selector) where TResult : IComparable<TResult>
+        {
+            var max = selector(span[0]);
+            foreach (var n in span[1..])
+            {
+                var key = selector(n);
+                if (max.CompareTo(key) <= 0)
+                    max = key;
+            }
+            return max;
+        }
+
+        public static int IndexOf<T>(this ReadOnlySpan<T> span, T value) where T : Enum
+        {
+            for(var i = 0; i < span.Length; i++)
+                if (span[i].Equals(value)) 
+                    return i;
+            return -1;
+        }
     }
 }
