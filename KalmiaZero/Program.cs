@@ -21,7 +21,7 @@ namespace KalmiaZero
             var valueFunc = new ValueFunction<double>(new NTuples(nTuples));
             var options = new ValueFuncOptimizerOptions<double>
             {
-                NumEpoch = 30,
+                NumEpoch = 1000,
                 LearningRate = 0.01,
                 Epsilon = 1.0e-6,
                 TrainDataPath = "../../../../../TrainData/train_data.bin",
