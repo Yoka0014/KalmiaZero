@@ -170,10 +170,10 @@ namespace KalmiaZero.NTuple
 
     public readonly struct NTuples
     {
-        public ReadOnlySpan<NTupleInfo> Tuples => this.TUPLES;
-        public int Length => this.TUPLES.Length;
-        public ReadOnlySpan<int> NumPossibleFeatures => this.NUM_POSSIBLE_FEATURES;
-        public ReadOnlySpan<int> PowTable => this.POW_TABLE;
+        public readonly ReadOnlySpan<NTupleInfo> Tuples => this.TUPLES;
+        public readonly int Length => this.TUPLES.Length;
+        public readonly ReadOnlySpan<int> NumPossibleFeatures => this.NUM_POSSIBLE_FEATURES;
+        public readonly ReadOnlySpan<int> PowTable => this.POW_TABLE;
 
         readonly NTupleInfo[] TUPLES;
         readonly int[] POW_TABLE;
@@ -181,8 +181,8 @@ namespace KalmiaZero.NTuple
         readonly int[][] TO_OPPONENT_FEATURE;
         readonly int[][] TO_MIRRORED_FEATURE;
 
-        public Span<int> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
-        public Span<int> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
+        public readonly Span<int> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
+        public readonly Span<int> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
 
         public NTuples(Span<NTupleInfo> tuples)
         {

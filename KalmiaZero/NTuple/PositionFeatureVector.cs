@@ -43,8 +43,6 @@ namespace KalmiaZero.NTuple
         Move[] prevLegalMoves = new Move[MAX_NUM_MOVES];
         int numPrevLegalMoves = 0;
 
-        readonly int[] POW_TABLE;
-
         public PositionFeatureVector(NTuples nTuples)
         {
             this.NTuples = nTuples;
@@ -55,9 +53,6 @@ namespace KalmiaZero.NTuple
 
             this.playerUpdator = UpdateAfterBlackMove;
             this.opponentUpdator = UpdateAfterWhiteMove;
-
-            this.POW_TABLE = new int[tuples.Max(x => x.Size)];
-            InitPowTable();
 
             InitFeatureDiffTable();
         }
@@ -73,20 +68,10 @@ namespace KalmiaZero.NTuple
                 Buffer.BlockCopy(pf.features[i], 0, f, 0, sizeof(int) * f.Length);
             }
 
-            this.playerUpdator = UpdateAfterBlackMove;
-            this.opponentUpdator = UpdateAfterWhiteMove;
+            this.playerUpdator = pf.playerUpdator;
+            this.opponentUpdator = pf.opponentUpdator;
 
-            this.POW_TABLE = new int[this.NTuples.Tuples.Max(x => x.Size)];
-            InitPowTable();
-
-            InitFeatureDiffTable();
-        }
-
-        void InitPowTable()
-        {
-            this.POW_TABLE[0] = 1;
-            for (var i = 1; i < this.POW_TABLE.Length; i++)
-                this.POW_TABLE[i] = this.POW_TABLE[i - 1] * NUM_SQUARE_STATES;
+            this.featureDiffTable = pf.featureDiffTable;
         }
 
         void InitFeatureDiffTable()
@@ -103,7 +88,7 @@ namespace KalmiaZero.NTuple
                         var coords = tuples[nTupleID].GetCoordinates(idx);
                         var coordIdx = coords.IndexOf(coord);
                         if (coordIdx != -1)
-                            table.Add(new FeatureDiff { FeatureID = (nTupleID, idx), Diff = this.POW_TABLE[coords.Length - coordIdx - 1] });
+                            table.Add(new FeatureDiff { FeatureID = (nTupleID, idx), Diff = this.NTuples.PowTable[coords.Length - coordIdx - 1] });
                     }
                 }
                 this.featureDiffTable[(int)coord] = table.ToArray();
@@ -139,23 +124,14 @@ namespace KalmiaZero.NTuple
                 for (var i = 0; i < tuples[nTupleID].NumSymmetricExpansions; i++)
                 {
                     f[i] = 0;
-                    foreach (BoardCoordinate coord in tuples[nTupleID].GetCoordinates(i))
-                    {
-                        if (NUM_SQUARE_STATES == 4)
-                        {
-                            var color = pos.GetSquareColorAt(coord);
-                            if (color != DiscColor.Null)
-                                f[i] = f[i] * NUM_SQUARE_STATES + (int)color;
-                            else if (legalMoves.Contains(coord))
-                                f[i] = f[i] * NUM_SQUARE_STATES + REACHABLE_EMPTY;
-                            else
-                                f[i] = f[i] * NUM_SQUARE_STATES + UNREACHABLE_EMPTY;
-                        }
-                        else
-                            f[i] = f[i] * NUM_SQUARE_STATES + (int)pos.GetSquareColorAt(coord);
-                    }
+                    var coordinates = tuples[nTupleID].GetCoordinates(i);
+                    foreach (BoardCoordinate coord in coordinates)
+                        f[i] = f[i] * NUM_SQUARE_STATES + (int)pos.GetSquareColorAt(coord);
                 }
             }
+
+            if(NUM_SQUARE_STATES == 4)
+                SetReachableEmpties(ref legalMoves);
         }
 
         public void CopyTo(PositionFeatureVector dest)

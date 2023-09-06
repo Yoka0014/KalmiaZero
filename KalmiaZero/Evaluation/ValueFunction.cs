@@ -92,21 +92,21 @@ namespace KalmiaZero.Evaluation
                 {
                     fs.Read(buffer[..weightSize], swapBytes);
                     if (weightSize == 2)
-                        pw[i] = CastToWeightType(BitConverter.ToHalf(buffer));
+                        pw[i] = WeightType.CreateChecked(BitConverter.ToHalf(buffer));
                     else if (weightSize == 4)
-                        pw[i] = CastToWeightType(BitConverter.ToSingle(buffer));
+                        pw[i] = WeightType.CreateChecked(BitConverter.ToSingle(buffer));
                     else if (weightSize == 8)
-                        pw[i] = CastToWeightType(BitConverter.ToDouble(buffer));
+                        pw[i] = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
                 }
             }
 
             fs.Read(buffer[..weightSize], swapBytes); 
             if (weightSize == 2)
-                valueFunc.Bias = CastToWeightType(BitConverter.ToHalf(buffer));
+                valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToHalf(buffer));
             else if (weightSize == 4)
-                valueFunc.Bias = CastToWeightType(BitConverter.ToSingle(buffer));
+                valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToSingle(buffer));
             else if (weightSize == 8)
-                valueFunc.Bias = CastToWeightType(BitConverter.ToDouble(buffer));
+                valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
 
             // expand weights
             valueFunc.weights[(int)DiscColor.Black] = valueFunc.ExpandPackedWeights(packedWeights);
@@ -131,12 +131,10 @@ namespace KalmiaZero.Evaluation
                     var mirrored = mirror[feature];
                     if (feature <= mirrored)
                     {
-                        if (typeof(WeightType) == typeof(Half) && (Half)rand.NextSingle() is WeightType hr)
-                            bw[feature] = hr * (max - min) + min;
-                        else if (typeof(WeightType) == typeof(float) && rand.NextSingle() is WeightType fr)
-                            bw[feature] = fr * (max - min) + min;
-                        else if (typeof(WeightType) == typeof(double) && rand.NextDouble() is WeightType dr)
-                            bw[feature] = dr * (max - min) + min;
+                        if (typeof(WeightType) == typeof(Half) || typeof(WeightType) == typeof(float))
+                            bw[feature] = WeightType.CreateChecked(rand.NextSingle()) * (max - min) + min;
+                        else if (typeof(WeightType) == typeof(double))
+                            bw[feature] = WeightType.CreateChecked(rand.NextDouble()) * (max - min) + min;
                     }
                     else
                         bw[feature] = bw[mirrored];
@@ -217,21 +215,21 @@ namespace KalmiaZero.Evaluation
                 fs.Write(BitConverter.GetBytes(pw.Length));
                 foreach (var v in pw)
                 {
-                    if (v is Half hv)
-                        fs.Write(BitConverter.GetBytes(hv));
-                    else if (v is float fv)
-                        fs.Write(BitConverter.GetBytes(fv));
-                    else if (v is double dv)
-                        fs.Write(BitConverter.GetBytes(dv));
+                    if (typeof(WeightType) == typeof(Half))
+                        fs.Write(BitConverter.GetBytes(Half.CreateChecked(v)));
+                    else if (typeof(WeightType) == typeof(float))
+                        fs.Write(BitConverter.GetBytes(float.CreateChecked(v)));
+                    else if (typeof(WeightType) == typeof(double))
+                        fs.Write(BitConverter.GetBytes(double.CreateChecked(v)));
                 }
             }
 
-            if (this.Bias is Half hb)
-                fs.Write(BitConverter.GetBytes(hb));
-            else if (this.Bias is float fb)
-                fs.Write(BitConverter.GetBytes(fb));
-            else if (this.Bias is double db)
-                fs.Write(BitConverter.GetBytes(db));
+            if (typeof(WeightType) == typeof(Half))
+                fs.Write(BitConverter.GetBytes(Half.CreateChecked(this.Bias)));
+            else if (typeof(WeightType) == typeof(float))
+                fs.Write(BitConverter.GetBytes(float.CreateChecked(this.Bias)));
+            else if (typeof(WeightType) == typeof(double))
+                fs.Write(BitConverter.GetBytes(double.CreateChecked(this.Bias)));
         }
 
         WeightType[][] PackWeights()
@@ -266,39 +264,6 @@ namespace KalmiaZero.Evaluation
                 }
             }
             return weights;
-        }
-
-        static WeightType CastToWeightType<SrcWeightType>(SrcWeightType sw) where SrcWeightType : IFloatingPointIeee754<SrcWeightType>
-        {
-            if (sw is WeightType ret)
-                return ret;
-
-            if (sw is Half hsw)
-            {
-                if (typeof(WeightType) == typeof(float) && (float)hsw is WeightType fdw)
-                    return fdw;
-
-                if (typeof(WeightType) == typeof(double) && (float)hsw is WeightType ddw)
-                    return ddw;
-            }
-            else if (sw is float fsw)
-            {
-                if (typeof(WeightType) == typeof(Half) && (Half)fsw is WeightType hdw)
-                    return hdw;
-
-                if (typeof(WeightType) == typeof(double) && (float)fsw is WeightType ddw)
-                    return ddw;
-            }
-            else if (sw is double dsw)
-            {
-                if (typeof(WeightType) == typeof(Half) && (Half)dsw is WeightType hdw)
-                    return hdw;
-
-                if (typeof(WeightType) == typeof(float) && (float)dsw is WeightType fdw)
-                    return fdw;
-            }
-
-            throw new InvalidCastException();
         }
 
         static T StdSigmoid<T>(T x) where T : IFloatingPointIeee754<T>

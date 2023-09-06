@@ -104,7 +104,7 @@ namespace KalmiaZero.Learning
 
             return new TrainDataItem[][] { trainData.ToArray(), testData.ToArray() };
 
-            void addPositions(List<TrainDataItem> trainData, WTHORGameRecord game, int depth)
+            static void addPositions(List<TrainDataItem> trainData, WTHORGameRecord game, int depth)
             {
                 var pos = new Position();
                 foreach (var move in game.MoveRecord)
@@ -115,7 +115,7 @@ namespace KalmiaZero.Learning
                         NextMove = move.Coord
                     };
 
-                    var discDiff = (pos.EmptySquareCount > depth) ? game.BlackDiscCount : game.BestBlackDiscCount;
+                    var discDiff = (pos.EmptySquareCount >= depth) ? game.BestBlackDiscCount : game.BlackDiscCount;
                     discDiff = 2 * discDiff - Constants.NUM_SQUARES;
                     item.FinalDiscDiff = (pos.SideToMove == DiscColor.Black) ? (sbyte)discDiff : (sbyte)(-discDiff);
                     item.EvalScore = float.NaN;

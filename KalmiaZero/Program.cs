@@ -8,6 +8,8 @@ using KalmiaZero.NTuple;
 using KalmiaZero.Protocols;
 using KalmiaZero.Reversi;
 using KalmiaZero.Learning;
+using KalmiaZero.Evaluation;
+using System.Linq;
 
 namespace KalmiaZero
 {
@@ -15,21 +17,18 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
-            var trainData = TrainData.CreateTrainDataFromWthorFile(@"C:\Users\yu_ok\source\repos\KalmiaZero\TrainData", "WTHOR.JOU", "WTHOR.TRN");
-            trainData[0].WriteToFile("train_data.bin");
-            trainData[1].WriteToFile("test_data.bin");
-
-            var data = TrainData.LoadFromFile("train_data.bin");
-            Console.WriteLine("TrainData");
-            Console.WriteLine(data.Length);
-            Console.WriteLine(data[0].FinalDiscDiff);
-            Console.WriteLine(data[0].NextMove);
-
-            data = TrainData.LoadFromFile("test_data.bin");
-            Console.WriteLine("\nTestData");
-            Console.WriteLine(data.Length);
-            Console.WriteLine(data[0].FinalDiscDiff);
-            Console.WriteLine(data[0].NextMove);
+            var nTuples = (from _ in Enumerable.Range(0, 100) select new NTupleInfo(7)).ToArray();
+            var valueFunc = new ValueFunction<double>(new NTuples(nTuples));
+            var options = new ValueFuncOptimizerOptions<double>
+            {
+                NumEpoch = 30,
+                LearningRate = 0.01,
+                Epsilon = 1.0e-6,
+                TrainDataPath = "../../../../../TrainData/train_data.bin",
+                TestDataPath = "../../../../../TrainData/test_data.bin"
+            };
+            var optimizer = new ValueFuncOptimizer<double>("../../../../../TrainWorkDir", valueFunc, options);
+            optimizer.StartOptimization();
         }
     }
 }

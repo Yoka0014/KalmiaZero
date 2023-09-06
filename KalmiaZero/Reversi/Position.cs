@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 using KalmiaZero.Utils;
@@ -79,6 +80,7 @@ namespace KalmiaZero.Reversi
 
         public readonly Player GetSquareOwnerAt(BoardCoordinate coord) => this.bitboard.GetSquareOwnerAt(coord);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly DiscColor GetSquareColorAt(BoardCoordinate coord)
         {
             var owner = this.bitboard.GetSquareOwnerAt(coord);

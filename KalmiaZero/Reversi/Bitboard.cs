@@ -76,6 +76,7 @@ namespace KalmiaZero.Reversi
             this.Opponent = Rotate90Clockwise(this.Opponent);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly Player GetSquareOwnerAt(BoardCoordinate coord)
         {
             var c = (int)coord;
@@ -91,6 +92,7 @@ namespace KalmiaZero.Reversi
         public readonly ulong ComputeFlippingDiscs(BoardCoordinate coord)
             => ComputeFlippingDiscs(this.Player, this.Opponent, coord);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void PutPlayerDiscAt(BoardCoordinate coord)
         {
             ulong bit = Utils.COORD_TO_BIT[(int)coord];
@@ -99,6 +101,7 @@ namespace KalmiaZero.Reversi
                 this.Opponent ^= bit;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void PutOpponentDiscAt(BoardCoordinate coord)
         {
             ulong bit = Utils.COORD_TO_BIT[(int)coord];
@@ -107,6 +110,7 @@ namespace KalmiaZero.Reversi
                 this.Player ^= bit;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RemoveDiscAt(BoardCoordinate coord)
         {
             ulong bit = Utils.COORD_TO_BIT[(int)coord];
@@ -114,6 +118,7 @@ namespace KalmiaZero.Reversi
             this.Opponent &= ~bit;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Update(BoardCoordinate coord, ulong flip)
         {
             ulong player = this.Player;
@@ -121,6 +126,7 @@ namespace KalmiaZero.Reversi
             this.Opponent = player | (Utils.COORD_TO_BIT[(int)coord] | flip);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Undo(BoardCoordinate coord, ulong flip)
         {
             ulong player = this.Player;
@@ -130,6 +136,7 @@ namespace KalmiaZero.Reversi
 
         public void Swap() => (this.Player, this.Opponent) = (this.Opponent, this.Player);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly ulong ComputeHashCode()
         {
             if (!Sse42.IsSupported && !Crc32.IsSupported)
@@ -194,6 +201,7 @@ namespace KalmiaZero.Reversi
 
         static ulong Rotate90Clockwise(ulong bitboard) => MirrorHorizontal(MirrorDiagA1H8(bitboard));
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static ulong ComputeCrc32(uint crc, ulong data)
         {
             if (Crc32.IsSupported)
@@ -209,6 +217,7 @@ namespace KalmiaZero.Reversi
             return Sse42.Crc32(Sse42.Crc32(crc, (uint)data), (uint)(data >> 32));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static ulong ComputeMobility(ulong player, ulong opponent)
         {
             if (Avx2.IsSupported)
@@ -220,6 +229,7 @@ namespace KalmiaZero.Reversi
             return ComputeMobility_General(player, opponent);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static ulong ComputeFlippingDiscs(ulong player, ulong opponent, BoardCoordinate coord)
         {
             if (Avx2.IsSupported)
