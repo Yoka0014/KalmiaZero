@@ -68,10 +68,24 @@ namespace KalmiaZero.NTuple
                 Buffer.BlockCopy(pf.features[i], 0, f, 0, sizeof(int) * f.Length);
             }
 
-            this.playerUpdator = pf.playerUpdator;
-            this.opponentUpdator = pf.opponentUpdator;
+            if (this.SideToMove == DiscColor.Black)
+            {
+                this.playerUpdator = UpdateAfterBlackMove;
+                this.opponentUpdator = UpdateAfterWhiteMove;
+            }
+            else
+            {
+                this.playerUpdator = UpdateAfterWhiteMove;
+                this.opponentUpdator = UpdateAfterBlackMove;
+            }
 
             this.featureDiffTable = pf.featureDiffTable;
+
+            if (NUM_SQUARE_STATES == 4)
+            {
+                Array.Copy(pf.prevLegalMoves, 0, this.prevLegalMoves, 0, pf.numPrevLegalMoves);
+                this.numPrevLegalMoves = pf.numPrevLegalMoves;
+            }
         }
 
         void InitFeatureDiffTable()
@@ -137,10 +151,25 @@ namespace KalmiaZero.NTuple
         public void CopyTo(PositionFeatureVector dest)
         {
             dest.SideToMove = this.SideToMove;
-            dest.playerUpdator = this.playerUpdator;
-            dest.opponentUpdator = this.opponentUpdator;
+            if (dest.SideToMove == DiscColor.Black)
+            {
+                dest.playerUpdator = dest.UpdateAfterBlackMove;
+                dest.opponentUpdator = dest.UpdateAfterWhiteMove;
+            }
+            else
+            {
+                dest.playerUpdator = dest.UpdateAfterWhiteMove;
+                dest.opponentUpdator = dest.UpdateAfterBlackMove;
+            }
+
             for (var i = 0; i < this.NTuples.Length; i++)
                 Buffer.BlockCopy(this.features[i], 0, dest.features[i], 0, sizeof(int) * dest.features[i].Length);
+
+            if (NUM_SQUARE_STATES == 4)
+            {
+                Array.Copy(this.prevLegalMoves, 0, dest.prevLegalMoves, 0, this.numPrevLegalMoves);
+                dest.numPrevLegalMoves = this.numPrevLegalMoves;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

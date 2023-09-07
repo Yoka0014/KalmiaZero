@@ -94,7 +94,7 @@ namespace KalmiaZero.Engines
         protected Position Position => this.position;
         protected ReadOnlyCollection<Move> MoveHistory => new(this.moveHistory);
 
-        Position position;
+        Position position = new();
         readonly List<Move> moveHistory = new();
 
         public Engine(string name, string version, string author)

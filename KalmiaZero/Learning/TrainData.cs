@@ -22,14 +22,18 @@ namespace KalmiaZero.Learning
             const int BUFFER_SIZE = 8;
             Span<byte> buffer = stackalloc byte[BUFFER_SIZE];
 
-            stream.Read(buffer, swapBytes);
+            stream.Read(buffer[..sizeof(ulong)], swapBytes);
             var player = BitConverter.ToUInt64(buffer);
-            stream.Read(buffer, swapBytes);
+
+            stream.Read(buffer[..sizeof(ulong)], swapBytes);
             var opponent = BitConverter.ToUInt64(buffer);
+
             this.Position = new Bitboard(player, opponent);
+
             this.NextMove = (BoardCoordinate)stream.ReadByte();
             this.FinalDiscDiff = (sbyte)stream.ReadByte();
-            stream.Read(buffer, swapBytes);
+
+            stream.Read(buffer[..sizeof(float)], swapBytes);
             this.EvalScore = BitConverter.ToSingle(buffer);
         }
 
@@ -68,7 +72,7 @@ namespace KalmiaZero.Learning
         public static void WriteToFile(this IEnumerable<TrainDataItem> trainData, string filePath)
         {
             using var fs = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.Write);
-            fs.Write(Encoding.ASCII.GetBytes(LABEL));
+            fs.Write(Encoding.ASCII.GetBytes(LABEL)); 
             fs.Write(BitConverter.GetBytes(trainData.Count()));
             foreach (var item in trainData)
                 item.WriteTo(fs);

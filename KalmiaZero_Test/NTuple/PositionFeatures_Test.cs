@@ -54,9 +54,13 @@ namespace KalmiaZero_Test.NTuple
                 for(var i = 0; i < expectedPf.NumNTuples; i++)
                 {
                     var expectedF = expectedPf.GetFeatures(i);
-                    var actualF = actualPf.GetFeatures(i);  
-                    for(var j = 0; j < expectedF.Length; j++)
+                    var actualF = actualPf.GetFeatures(i);
+                    for (var j = 0; j < expectedF.Length; j++)
+                    {
+                        Assert.IsTrue(expectedF[j] >= 0 && expectedF[j] < nTuples.PowTable[NTUPLE_SIZE]);
+                        Assert.IsTrue(actualF[j] >= 0 && actualF[j] < nTuples.PowTable[NTUPLE_SIZE]);
                         Assert.AreEqual(expectedF[j], actualF[j]);
+                    }
                 }
                 moveCount++;
             }

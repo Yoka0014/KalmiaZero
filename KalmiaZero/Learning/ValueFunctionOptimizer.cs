@@ -9,8 +9,8 @@ using KalmiaZero.Reversi;
 using KalmiaZero.Evaluation;
 using KalmiaZero.NTuple;
 using KalmiaZero.Utils;
-using System.Threading;
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace KalmiaZero.Learning
 {
@@ -195,6 +195,7 @@ namespace KalmiaZero.Learning
 
             return loss / WeightType.CreateChecked(batch.Length);
 
+            [SkipLocalsInit]
             WeightType kernel(int threadID, Span<BatchItem<WeightType>> batch)
             {
                 var loss = WeightType.Zero;
@@ -284,6 +285,7 @@ namespace KalmiaZero.Learning
 
             return loss / WeightType.CreateChecked(batch.Length);
 
+            [SkipLocalsInit]
             WeightType calcLoss(Span<BatchItem<WeightType>> batch)
             {
                 var featureVec = new PositionFeatureVector(this.valueFunc.NTuples);

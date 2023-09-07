@@ -13,10 +13,10 @@ namespace KalmiaZero.Engines
 
     internal class ValueGreedyEngine : Engine
     {
-        PositionFeatureVector? posFeatures;
+        PositionFeatureVector? posFeatureVec;
         ValueFunction<Half>? valueFunc;
 
-        public ValueGreedyEngine() : base("ValueGreedyEngine", "0.0", "Yoka346")
+        public ValueGreedyEngine() : base("ValueGreedyEngine", "0.0", "Yoka0014")
         {
             this.Options.Add("WeightsFilePath", new EngineOption(string.Empty, EngineOptionType.FileName));
             this.Options.Last().Value.ValueChanged += ValueFuncWeightsPathSpecified;
@@ -33,34 +33,38 @@ namespace KalmiaZero.Engines
 
         public override void Go(bool ponder)
         {
-            if (posFeatures is null || valueFunc is null)
-                throw new InvalidOperationException("Specify value function's weights file path.");
+            if (posFeatureVec is null || valueFunc is null)
+                throw new InvalidOperationException("Specify weights file path of value fucntion.");
 
             Span<Move> nextMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
-            var numNextmoves = this.Position.GetNextMoves(ref nextMoves);
+            var numNextMoves = this.Position.GetNextMoves(ref nextMoves);
+            var pos = this.Position;
 
-            if(numNextmoves == 0)
+            if (numNextMoves == 0)
             {
+                pos.Pass();
+                numNextMoves = pos.GetNextMoves(ref nextMoves);
+                this.posFeatureVec.Pass(nextMoves[..numNextMoves]);
                 SendMove(new EngineMove(BoardCoordinate.Pass));
                 return;
             }
 
-            var pos = this.Position;
-            var pf = new PositionFeatureVector(this.posFeatures);
+            var pf = new PositionFeatureVector(this.posFeatureVec);
             Span<Move> legalMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
             Span<Half> values = stackalloc Half[nextMoves.Length];
-            for(var i = 0; i < values.Length; i++)
+            for(var i = 0; i < numNextMoves; i++)
             {
-                this.posFeatures.CopyTo(pf);
+                this.posFeatureVec.CopyTo(pf);
                 pos.GenerateMove(ref nextMoves[i]);
                 pos.Update(ref nextMoves[i]);
                 var numMoves = pos.GetNextMoves(ref legalMoves);
                 pf.Update(ref nextMoves[i], legalMoves[..numMoves]);
-                values[i] = this.valueFunc.Predict(pf);
+                values[i] = Half.One - this.valueFunc.Predict(pf);
+                pos.Undo(ref nextMoves[i]);
             }
 
             var multiPV = new MultiPV();
-            for(var i = 0; i < nextMoves.Length; i++)
+            for(var i = 0; i < numNextMoves; i++)
             {
                 multiPV.Add(new MultiPVItem
                 {
@@ -82,6 +86,10 @@ namespace KalmiaZero.Engines
             });
         }
 
+        protected override void OnUpdatedPosition() => UpdateFeature();
+
+        protected override void OnUndidPosition() => UpdateFeature();
+
         public override void Analyze(int numMoves)
         {
             SendErrorMessage("Analyze is not supported.");
@@ -95,15 +103,22 @@ namespace KalmiaZero.Engines
         protected override void OnEndGame() { }
         protected override void OnInitializedPosition() { }
         protected override void OnClearedPosition() { }
-        protected override void OnUpdatedPosition() { }
-        protected override void OnUndidPosition() { }
+
+        void UpdateFeature()
+        {
+            var pos = this.Position;
+            Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
+            var numMoves = pos.GetNextMoves(ref moves);
+            this.posFeatureVec?.Init(ref pos, moves[..numMoves]);
+        }
 
         void ValueFuncWeightsPathSpecified(object? sender, dynamic e)
         {
             try
             {
                 this.valueFunc = ValueFunction<Half>.LoadFromFile(e.ToString());
-                this.posFeatures = new PositionFeatureVector(this.valueFunc.NTuples);
+                this.posFeatureVec = new PositionFeatureVector(this.valueFunc.NTuples);
+                UpdateFeature();
             }
             catch (Exception ex)
             {

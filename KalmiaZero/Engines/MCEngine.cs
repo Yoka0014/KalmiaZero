@@ -16,7 +16,7 @@ namespace KalmiaZero.Engines
         Task? simulationThread;
         CancellationTokenSource? cts;
 
-        public MCEngine() : base("MonteCarloEngine", "0.0", "Yoka346")
+        public MCEngine() : base("MonteCarloEngine", "0.0", "Yoka0014")
         {
             this.Options.Add("NumPlayouts", new EngineOption(100, 1, long.MaxValue));
         }
