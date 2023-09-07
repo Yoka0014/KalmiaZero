@@ -177,11 +177,11 @@ namespace KalmiaZero.NTuple
         readonly NTupleInfo[] TUPLES;
         readonly int[] POW_TABLE;
         readonly int[] NUM_POSSIBLE_FEATURES;
-        readonly int[][] TO_OPPONENT_FEATURE;
-        readonly int[][] TO_MIRRORED_FEATURE;
+        readonly FeatureType[][] TO_OPPONENT_FEATURE;
+        readonly FeatureType[][] TO_MIRRORED_FEATURE;
 
-        public readonly Span<int> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
-        public readonly Span<int> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
+        public readonly Span<FeatureType> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
+        public readonly Span<FeatureType> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
 
         public NTuples(Span<NTupleInfo> tuples)
         {
@@ -192,10 +192,10 @@ namespace KalmiaZero.NTuple
 
             this.NUM_POSSIBLE_FEATURES = this.TUPLES.Select(x => powTable[x.Size]).ToArray();
 
-            this.TO_OPPONENT_FEATURE = new int[this.TUPLES.Length][];
+            this.TO_OPPONENT_FEATURE = new FeatureType[this.TUPLES.Length][];
             InitOpponentFeatureTable();
 
-            this.TO_MIRRORED_FEATURE = new int[this.TUPLES.Length][];
+            this.TO_MIRRORED_FEATURE = new FeatureType[this.TUPLES.Length][];
             InitMirroredFeatureTable();
         }
 
@@ -211,17 +211,17 @@ namespace KalmiaZero.NTuple
             for (var nTupleID = 0; nTupleID < TO_OPPONENT_FEATURE.Length; nTupleID++)
             {
                 ref NTupleInfo nTuple = ref this.TUPLES[nTupleID];
-                var table = TO_OPPONENT_FEATURE[nTupleID] = new int[NUM_POSSIBLE_FEATURES[nTupleID]];
+                var table = TO_OPPONENT_FEATURE[nTupleID] = new FeatureType[NUM_POSSIBLE_FEATURES[nTupleID]];
                 for (var feature = 0; feature < table.Length; feature++)
                 {
-                    var oppFeature = 0;
+                    FeatureType oppFeature = 0;
                     for (var i = 0; i < nTuple.Size; i++)
                     {
                         var state = feature / POW_TABLE[i] % NUM_SQUARE_STATES;
                         if (state == UNREACHABLE_EMPTY || state == REACHABLE_EMPTY)
-                            oppFeature += state * POW_TABLE[i];
+                            oppFeature += (FeatureType)(state * POW_TABLE[i]);
                         else
-                            oppFeature += (int)Reversi.Utils.ToOpponentColor((DiscColor)state) * POW_TABLE[i];
+                            oppFeature += (FeatureType)((int)Reversi.Utils.ToOpponentColor((DiscColor)state) * POW_TABLE[i]);
                     }
                     table[feature] = oppFeature;
                 }
@@ -237,16 +237,20 @@ namespace KalmiaZero.NTuple
 
                 if (shuffleTable.Length == 0)
                 {
-                    this.TO_MIRRORED_FEATURE[nTupleID] = Enumerable.Range(0, NUM_POSSIBLE_FEATURES[nTupleID]).ToArray();
+                    this.TO_MIRRORED_FEATURE[nTupleID] = (from f in Enumerable.Range(0, NUM_POSSIBLE_FEATURES[nTupleID])
+                                                          select (FeatureType)f).ToArray();
                     continue;
                 }
 
-                var table = this.TO_MIRRORED_FEATURE[nTupleID] = new int[NUM_POSSIBLE_FEATURES[nTupleID]];
+                var table = this.TO_MIRRORED_FEATURE[nTupleID] = new FeatureType[NUM_POSSIBLE_FEATURES[nTupleID]];
                 for (var feature = 0; feature < table.Length; feature++)
                 {
-                    var mirroredFeature = 0;
+                    FeatureType mirroredFeature = 0;
                     for (var i = 0; i < nTuple.Size; i++)
-                        mirroredFeature += feature / POW_TABLE[nTuple.Size - shuffleTable[i] - 1] % NUM_SQUARE_STATES * POW_TABLE[nTuple.Size - i - 1];
+                    {
+                        var state = feature / POW_TABLE[nTuple.Size - shuffleTable[i] - 1] % NUM_SQUARE_STATES;
+                        mirroredFeature += (FeatureType)(state * POW_TABLE[nTuple.Size - i - 1]);
+                    }
                     table[feature] = mirroredFeature;
                 }
             }

@@ -125,7 +125,7 @@ namespace KalmiaZero.Evaluation
             for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
             {
                 var bw = bWeights[nTupleID];
-                ReadOnlySpan<int> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
                 {
                     var mirrored = mirror[feature];
@@ -154,7 +154,7 @@ namespace KalmiaZero.Evaluation
             {
                 var bw = bWeights[nTupleID];
                 var ww = wWeights[nTupleID];
-                ReadOnlySpan<int> toOpponent = this.NTuples.GetOpponentFeatureTable(nTupleID);
+                ReadOnlySpan<FeatureType> toOpponent = this.NTuples.GetOpponentFeatureTable(nTupleID);
                 for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
                     ww[feature] = bw[toOpponent[feature]];
             }
@@ -168,7 +168,7 @@ namespace KalmiaZero.Evaluation
             for (var nTupleID = 0; nTupleID < weights.Length; nTupleID++)
             {
                 var w = weights[nTupleID];
-                ReadOnlySpan<int> features = posFeature.GetFeatures(nTupleID);
+                ReadOnlySpan<FeatureType> features = posFeature.GetFeatures(nTupleID);
                 for (var i = 0; i < features.Length; i++)
                     x += w[features[i]];
             }
@@ -240,7 +240,7 @@ namespace KalmiaZero.Evaluation
             {
                 var w = weights[nTupleID];
                 var pw = packedWeights[nTupleID];
-                ReadOnlySpan<int> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 for (var feature = 0; feature < w.Length; feature++)
                     if (feature <= mirror[feature])
                         pw.Add(w[feature]);
@@ -255,7 +255,7 @@ namespace KalmiaZero.Evaluation
             {
                 var w = weights[nTupleID] = new WeightType[this.NTuples.NumPossibleFeatures[nTupleID]];
                 var pw = packedWeights[nTupleID];
-                ReadOnlySpan<int> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 var i = 0;
                 for (var feature = 0; feature < w.Length; feature++)
                 {

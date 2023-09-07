@@ -154,7 +154,7 @@ namespace KalmiaZero.Learning
             sw.WriteLine(testLossSb.ToString());
         }
 
-        BatchItem<WeightType>[] CreateBatch(string path)
+        static BatchItem<WeightType>[] CreateBatch(string path)
         {
             TrainDataItem[] data = TrainData.LoadFromFile(path);
             var batch = new BatchItem<WeightType>[data.Length];
@@ -215,8 +215,8 @@ namespace KalmiaZero.Learning
                     for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
                     {
                         var g = gradPerThread[nTupleID];
-                        ReadOnlySpan<int> features = featureVec.GetFeatures(nTupleID);
-                        ReadOnlySpan<int> mirror = nTuples.GetMirroredFeatureTable(nTupleID);
+                        ReadOnlySpan<FeatureType> features = featureVec.GetFeatures(nTupleID);
+                        ReadOnlySpan<FeatureType> mirror = nTuples.GetMirroredFeatureTable(nTupleID);
                         for (var j = 0; j < features.Length; j++)
                         {
                             var f = features[j];

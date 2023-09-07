@@ -1,4 +1,6 @@
-﻿using System;
+﻿global using FeatureType = System.UInt16;
+
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
@@ -13,13 +15,13 @@ namespace KalmiaZero.NTuple
 
     public static class PositionFeaturesConstantConfig 
     {
-        public const int NUM_SQUARE_STATES = 4;     // BLACK, WHITE, REACHEABLE_EMPTY and UNREACHABLE_EMPTY
+        public const FeatureType NUM_SQUARE_STATES = 4;     // BLACK, WHITE, REACHEABLE_EMPTY and UNREACHABLE_EMPTY
         //public const int NUM_SQUARE_STATES = 3;   // BLACK, WHITE and EMPTY
 
-        public const int BLACK = (int)DiscColor.Black;  // 0
-        public const int WHITE = (int)DiscColor.White;  // 1
-        public const int UNREACHABLE_EMPTY = 2;
-        public const int REACHABLE_EMPTY = 3;
+        public const FeatureType BLACK = (int)DiscColor.Black;  // 0
+        public const FeatureType WHITE = (int)DiscColor.White;  // 1
+        public const FeatureType UNREACHABLE_EMPTY = 2;
+        public const FeatureType REACHABLE_EMPTY = 3;
     }
 
     /// <summary>
@@ -31,23 +33,23 @@ namespace KalmiaZero.NTuple
         public int NumNTuples => this.NTuples.Length;
         public NTuples NTuples { get; }
 
-        readonly int[][] features;  // features[nTupleID][idx]
+        readonly FeatureType[][] features;  // features[nTupleID][idx]
         readonly FeatureDiff[][] featureDiffTable = new FeatureDiff[NUM_SQUARES][];
 
         delegate void Updator(ref Move move);
         Updator playerUpdator;
         Updator opponentUpdator;
 
-        Move[] prevLegalMoves = new Move[MAX_NUM_MOVES];
+        readonly Move[] prevLegalMoves = new Move[MAX_NUM_MOVES];
         int numPrevLegalMoves = 0;
 
         public PositionFeatureVector(NTuples nTuples)
         {
             this.NTuples = nTuples;
-            this.features = new int[this.NTuples.Length][];
+            this.features = new FeatureType[this.NTuples.Length][];
             var tuples = this.NTuples.Tuples;
             for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
-                this.features[nTupleID] = new int[tuples[nTupleID].NumSymmetricExpansions];
+                this.features[nTupleID] = new FeatureType[tuples[nTupleID].NumSymmetricExpansions];
 
             this.playerUpdator = UpdateAfterBlackMove;
             this.opponentUpdator = UpdateAfterWhiteMove;
@@ -59,10 +61,10 @@ namespace KalmiaZero.NTuple
         {
             this.SideToMove = pf.SideToMove;
             this.NTuples = pf.NTuples;
-            this.features = new int[pf.NumNTuples][];
+            this.features = new FeatureType[pf.NumNTuples][];
             for(var i = 0; i < this.features.Length; i++)
             {
-                var f = this.features[i] = new int[pf.features[i].Length];
+                var f = this.features[i] = new FeatureType[pf.features[i].Length];
                 Buffer.BlockCopy(pf.features[i], 0, f, 0, sizeof(int) * f.Length);
             }
 
@@ -107,7 +109,7 @@ namespace KalmiaZero.NTuple
             }
         }
 
-        public ReadOnlySpan<int> GetFeatures(int nTupleID) => this.features[nTupleID];
+        public ReadOnlySpan<FeatureType> GetFeatures(int nTupleID) => this.features[nTupleID];
 
         public void Init(Bitboard bitboard, DiscColor sideToMove, Span<Move> legalMoves)
         {
@@ -131,14 +133,14 @@ namespace KalmiaZero.NTuple
 
             for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
             {
-                var tuples = this.NTuples.Tuples;
-                int[] f = this.features[nTupleID];
+                ReadOnlySpan<NTupleInfo> tuples = this.NTuples.Tuples;
+                FeatureType[] f = this.features[nTupleID];
                 for (var i = 0; i < tuples[nTupleID].NumSymmetricExpansions; i++)
                 {
                     f[i] = 0;
                     var coordinates = tuples[nTupleID].GetCoordinates(i);
                     foreach (BoardCoordinate coord in coordinates)
-                        f[i] = f[i] * NUM_SQUARE_STATES + (int)pos.GetSquareColorAt(coord);
+                        f[i] = (FeatureType)(f[i] * NUM_SQUARE_STATES + (int)pos.GetSquareColorAt(coord));
                 }
             }
 
@@ -205,14 +207,14 @@ namespace KalmiaZero.NTuple
         void UpdateAfterBlackMove(ref Move move)
         {
             foreach (var diff in this.featureDiffTable[(int)move.Coord])
-                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (BLACK - UNREACHABLE_EMPTY) * diff.Diff;
+                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((BLACK - UNREACHABLE_EMPTY) * diff.Diff);
 
             ulong flipped = move.Flip;
             for(int coord = FindFirstSet(flipped); flipped != 0; coord = FindNextSet(ref flipped))
             {
                 var diffTable = this.featureDiffTable[coord];
                 foreach (var diff in diffTable)
-                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (BLACK - WHITE) * diff.Diff;
+                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((BLACK - WHITE) * diff.Diff);
             }
             
             this.SideToMove = DiscColor.White;
@@ -221,14 +223,14 @@ namespace KalmiaZero.NTuple
         void UpdateAfterWhiteMove(ref Move move)
         {
             foreach (var diff in this.featureDiffTable[(int)move.Coord])
-                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (WHITE - UNREACHABLE_EMPTY) * diff.Diff;
+                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((WHITE - UNREACHABLE_EMPTY) * diff.Diff);
 
             ulong flipped = move.Flip;
             for (int coord = FindFirstSet(flipped); flipped != 0; coord = FindNextSet(ref flipped))
             {
                 var diffTable = this.featureDiffTable[coord];
                 foreach (var diff in diffTable)
-                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (WHITE - BLACK) * diff.Diff;
+                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((WHITE - BLACK) * diff.Diff);
             }
 
             this.SideToMove = DiscColor.Black;
@@ -240,7 +242,7 @@ namespace KalmiaZero.NTuple
             {
                 var diffTable = this.featureDiffTable[(int)move.Coord];
                 foreach (var diff in diffTable)
-                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (REACHABLE_EMPTY - UNREACHABLE_EMPTY) * diff.Diff;
+                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((REACHABLE_EMPTY - UNREACHABLE_EMPTY) * diff.Diff);
             }
         }
 
@@ -250,7 +252,7 @@ namespace KalmiaZero.NTuple
             {
                 var diffTable = this.featureDiffTable[(int)this.prevLegalMoves[i].Coord];
                 foreach (var diff in diffTable)
-                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (UNREACHABLE_EMPTY - REACHABLE_EMPTY) * diff.Diff;
+                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((UNREACHABLE_EMPTY - REACHABLE_EMPTY) * diff.Diff);
             }
         }
 
