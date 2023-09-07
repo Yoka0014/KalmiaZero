@@ -86,8 +86,8 @@ namespace KalmiaZero.Engines
             });
         }
 
+        protected override void OnInitializedPosition() => UpdateFeature();
         protected override void OnUpdatedPosition() => UpdateFeature();
-
         protected override void OnUndidPosition() => UpdateFeature();
 
         public override void Analyze(int numMoves)
@@ -101,7 +101,6 @@ namespace KalmiaZero.Engines
         protected override bool OnReady() => true;
         protected override void OnStartGame() { }
         protected override void OnEndGame() { }
-        protected override void OnInitializedPosition() { }
         protected override void OnClearedPosition() { }
 
         void UpdateFeature()

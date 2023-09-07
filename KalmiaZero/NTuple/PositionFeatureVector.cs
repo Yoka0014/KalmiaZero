@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 using KalmiaZero.Utils;
 using KalmiaZero.Reversi;
-using System.Threading.Tasks.Dataflow;
 
 namespace KalmiaZero.NTuple
 {

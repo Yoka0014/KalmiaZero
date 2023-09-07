@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Xml.Schema;
 
 namespace KalmiaZero.Reversi
 {
