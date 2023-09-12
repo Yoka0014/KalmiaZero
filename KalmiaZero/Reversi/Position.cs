@@ -43,15 +43,17 @@ namespace KalmiaZero.Reversi
             this.OpponentColor = DiscColor.White;
         }
 
-        public Position(Bitboard bitboard, DiscColor sideToMove)
+        public Position(Bitboard bitboard, DiscColor sideToMove) => Init(bitboard, sideToMove);
+
+        public readonly Bitboard GetBitboard() => this.bitboard;
+        public void SetBitboard(Bitboard bitboard) { this.bitboard = bitboard; }
+
+        public void Init(Bitboard bitboard, DiscColor sideToMove)
         {
             this.bitboard = bitboard;
             this.sideToMove = sideToMove;
             this.OpponentColor = Utils.ToOpponentColor(sideToMove);
         }
-
-        public readonly Bitboard GetBitboard() => this.bitboard;
-        public void SetBitboard(Bitboard bitboard) { this.bitboard = bitboard; }
 
         public static bool operator==(Position left, Position right)
             => left.bitboard == right.bitboard && left.sideToMove == right.sideToMove;
@@ -126,6 +128,7 @@ namespace KalmiaZero.Reversi
         /// Pass move is not supported. Use Position.Pass method instead.
         /// </summary>
         /// <param name="move"></param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Update(ref Move move)
         {
             (this.sideToMove, this.OpponentColor) = (this.OpponentColor, this.sideToMove);
@@ -139,6 +142,7 @@ namespace KalmiaZero.Reversi
         /// </summary>
         /// <param name="coord"></param>
         /// <returns>Whether the move at the specified coordinate is legal or not</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Update(BoardCoordinate coord)
         {
             if (!IsLegalMoveAt(coord))
@@ -161,12 +165,14 @@ namespace KalmiaZero.Reversi
         /// Thus, if an illegal move is specified, the contents of the position may lose consistency.
         /// </summary>
         /// <param name="move"></param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Undo(ref Move move)
         {
             (this.sideToMove, this.OpponentColor) = (this.OpponentColor, this.sideToMove);
             this.bitboard.Undo(move.Coord, move.Flip);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly int GetNextMoves(ref Span<Move> moves)
         {
             ulong mobility = this.bitboard.ComputePlayerMobility();

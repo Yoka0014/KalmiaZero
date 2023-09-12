@@ -1,4 +1,6 @@
-﻿using System;
+﻿global using MultiPV = System.Collections.Generic.List<KalmiaZero.Engines.MultiPVItem>;
+
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -7,8 +9,6 @@ using KalmiaZero.Reversi;
 
 namespace KalmiaZero.Engines
 {
-    using EngineOptions = Dictionary<string, EngineOption>;
-    using MultiPV = List<MultiPVItem>;
 
     public enum EngineState
     {
@@ -29,24 +29,32 @@ namespace KalmiaZero.Engines
 
     public class ThinkInfo
     {
-        public int? EllpasedMs { get; set; }
-        public int? NodeCount { get; set; }
-        public double? Nps { get; set; }
-        public int? Depth { get; set; }
-        public int? SelectedDepth { get; set; }
-        public double? EvalScore { get; set; }
-        public List<BoardCoordinate> PrincipalVariation { get; } = new();
+        public int? EllpasedMs { get; init; }
+        public ulong? NodeCount { get; init; }
+        public double? Nps { get; init; }
+        public int? Depth { get; init; }
+        public int? SelectedDepth { get; init; }
+        public double? EvalScore { get; init; }
+        public ReadOnlySpan<BoardCoordinate> PrincipalVariation => this.pv;
+
+        BoardCoordinate[] pv;
+
+        public ThinkInfo(IEnumerable<BoardCoordinate> pv) => this.pv = pv.ToArray();
     }
 
     public class MultiPVItem
     {
-        public int? Depth { get; set; }
-        public ulong? NodeCount { get; set; }
-        public double? EvalScore { get; set; }
-        public EvalScoreType EvalScoreType { get; set; } = EvalScoreType.Other;
-        public GameResult ExactWLD { get; set; } = GameResult.NotOver;
-        public int? ExactDiscDiff { get; set; }
-        public List<BoardCoordinate> PrincipalVariation { get; } = new();
+        public int? Depth { get; init; }
+        public ulong? NodeCount { get; init; }
+        public double? EvalScore { get; init; }
+        public EvalScoreType EvalScoreType { get; init; } = EvalScoreType.Other;
+        public GameResult ExactWLD { get; init; } = GameResult.NotOver;
+        public int? ExactDiscDiff { get; init; }
+        public ReadOnlySpan<BoardCoordinate> PrincipalVariation => this.pv;
+
+        BoardCoordinate[] pv;
+
+        public MultiPVItem(IEnumerable<BoardCoordinate> pv) => this.pv = pv.ToArray();
     }
 
     public class EngineMove

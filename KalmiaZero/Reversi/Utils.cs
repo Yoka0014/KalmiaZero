@@ -5,6 +5,10 @@ namespace KalmiaZero.Reversi
 {
     using static Constants;
 
+    internal interface IDiscColor { }
+    internal struct Black : IDiscColor { }
+    internal struct White : IDiscColor { }
+
     public static class Utils
     {
         public static ReadOnlySpan<ulong> COORD_TO_BIT => new ulong[NUM_SQUARES + 1]

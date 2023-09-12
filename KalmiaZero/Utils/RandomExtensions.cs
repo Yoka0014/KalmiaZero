@@ -5,12 +5,14 @@ namespace KalmiaZero.Utils
 {
     internal static class RandomExtensions
     {
-        public static void Shuffle<T>(this Random rand, Span<T> array)
+        public static void Shuffle<T>(this Random rand, T[] array) => rand.Shuffle(array.AsSpan());
+
+        public static void Shuffle<T>(this Random rand, Span<T> span)
         {
-            for(var i = array.Length - 1; i > 0; i--)
+            for(var i = span.Length - 1; i > 0; i--)
             {
                 var j = rand.Next(0, i + 1);
-                (array[i], array[j]) = (array[j], array[i]);
+                (span[i], span[j]) = (span[j], span[i]);
             }
         }
 

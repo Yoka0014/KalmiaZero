@@ -8,7 +8,7 @@ using KalmiaZero.Utils;
 using KalmiaZero.Reversi;
 using KalmiaZero.GameFormats;
 
-namespace KalmiaZero.Learning
+namespace KalmiaZero.Learn
 {
     public struct TrainDataItem
     {

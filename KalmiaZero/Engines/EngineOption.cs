@@ -1,6 +1,10 @@
-﻿using System;
+﻿global using EngineOptions = System.Collections.Generic.Dictionary<string, KalmiaZero.Engines.EngineOption>;
+
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+
+using KalmiaZero.Utils;
 
 namespace KalmiaZero.Engines
 {

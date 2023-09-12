@@ -39,6 +39,9 @@ namespace KalmiaZero.NTuple
         delegate void Updator(ref Move move);
         Updator playerUpdator;
         Updator opponentUpdator;
+        Updator playerRestorer;
+        Updator opponentRestorer;
+
 
         readonly Move[] prevLegalMoves = new Move[MAX_NUM_MOVES];
         int numPrevLegalMoves = 0;
@@ -51,8 +54,8 @@ namespace KalmiaZero.NTuple
             for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
                 this.features[nTupleID] = new FeatureType[tuples[nTupleID].NumSymmetricExpansions];
 
-            this.playerUpdator = UpdateAfterBlackMove;
-            this.opponentUpdator = UpdateAfterWhiteMove;
+            (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
+            (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
 
             InitFeatureDiffTable();
         }
@@ -65,18 +68,18 @@ namespace KalmiaZero.NTuple
             for(var i = 0; i < this.features.Length; i++)
             {
                 var f = this.features[i] = new FeatureType[pf.features[i].Length];
-                Buffer.BlockCopy(pf.features[i], 0, f, 0, sizeof(int) * f.Length);
+                Buffer.BlockCopy(pf.features[i], 0, f, 0, sizeof(FeatureType) * f.Length);
             }
 
             if (this.SideToMove == DiscColor.Black)
             {
-                this.playerUpdator = UpdateAfterBlackMove;
-                this.opponentUpdator = UpdateAfterWhiteMove;
+                (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
+                (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
             }
             else
             {
-                this.playerUpdator = UpdateAfterWhiteMove;
-                this.opponentUpdator = UpdateAfterBlackMove;
+                (this.playerUpdator, this.opponentUpdator) = (Update<White>, Update<Black>);
+                (this.playerRestorer, this.opponentRestorer) = (Undo<Black>, Undo<White>);
             }
 
             this.featureDiffTable = pf.featureDiffTable;
@@ -121,9 +124,9 @@ namespace KalmiaZero.NTuple
         {
             this.SideToMove = pos.SideToMove;
             if(this.SideToMove == DiscColor.Black)
-                (this.playerUpdator, this.opponentUpdator) = (UpdateAfterBlackMove, UpdateAfterWhiteMove);
+                (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
             else
-                (this.playerUpdator, this.opponentUpdator) = (UpdateAfterWhiteMove, UpdateAfterBlackMove);
+                (this.playerUpdator, this.opponentUpdator) = (Update<White>, Update<Black>);
 
             if (NUM_SQUARE_STATES == 4)
             {
@@ -153,17 +156,17 @@ namespace KalmiaZero.NTuple
             dest.SideToMove = this.SideToMove;
             if (dest.SideToMove == DiscColor.Black)
             {
-                dest.playerUpdator = dest.UpdateAfterBlackMove;
-                dest.opponentUpdator = dest.UpdateAfterWhiteMove;
+                (dest.playerUpdator, dest.opponentUpdator) = (dest.Update<Black>, dest.Update<White>);
+                (dest.playerRestorer, dest.opponentRestorer) = (dest.Undo<White>, dest.Undo<Black>);
             }
             else
             {
-                dest.playerUpdator = dest.UpdateAfterWhiteMove;
-                dest.opponentUpdator = dest.UpdateAfterBlackMove;
+                (dest.playerUpdator, dest.opponentUpdator) = (dest.Update<White>, dest.Update<Black>);
+                (dest.playerRestorer, dest.opponentRestorer) = (dest.Undo<Black>, dest.Undo<White>);
             }
 
             for (var i = 0; i < this.NTuples.Length; i++)
-                Buffer.BlockCopy(this.features[i], 0, dest.features[i], 0, sizeof(int) * dest.features[i].Length);
+                Buffer.BlockCopy(this.features[i], 0, dest.features[i], 0, sizeof(FeatureType) * dest.features[i].Length);
 
             if (NUM_SQUARE_STATES == 4)
             {
@@ -180,8 +183,27 @@ namespace KalmiaZero.NTuple
 
             this.playerUpdator.Invoke(ref move);
             (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
+            (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
 
             if (NUM_SQUARE_STATES == 4)
+            {
+                SetReachableEmpties(ref legalMoves);
+                legalMoves.CopyTo(this.prevLegalMoves);
+                this.numPrevLegalMoves = legalMoves.Length;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Undo(ref Move move, Span<Move> legalMoves)
+        {
+            if (NUM_SQUARE_STATES == 4)
+                RemoveReachableEmpties();
+
+            this.playerRestorer.Invoke(ref move);
+            (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
+            (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
+
+            if(NUM_SQUARE_STATES == 4)
             {
                 SetReachableEmpties(ref legalMoves);
                 legalMoves.CopyTo(this.prevLegalMoves);
@@ -202,38 +224,45 @@ namespace KalmiaZero.NTuple
 
             this.SideToMove = Reversi.Utils.ToOpponentColor(this.SideToMove);
             (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
+            (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
         }
 
-        void UpdateAfterBlackMove(ref Move move)
+        void Update<SideToMove>(ref Move move) where SideToMove : struct, IDiscColor
         {
-            foreach (var diff in this.featureDiffTable[(int)move.Coord])
-                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((BLACK - UNREACHABLE_EMPTY) * diff.Diff);
+            var placer = typeof(SideToMove) == typeof(Black) ? BLACK - UNREACHABLE_EMPTY : WHITE - UNREACHABLE_EMPTY;
+            var flipper = typeof(SideToMove) == typeof(Black) ? BLACK - WHITE : WHITE - BLACK;
 
-            ulong flipped = move.Flip;
-            for(int coord = FindFirstSet(flipped); flipped != 0; coord = FindNextSet(ref flipped))
-            {
-                var diffTable = this.featureDiffTable[coord];
-                foreach (var diff in diffTable)
-                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((BLACK - WHITE) * diff.Diff);
-            }
-            
-            this.SideToMove = DiscColor.White;
-        }
-
-        void UpdateAfterWhiteMove(ref Move move)
-        {
             foreach (var diff in this.featureDiffTable[(int)move.Coord])
-                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((WHITE - UNREACHABLE_EMPTY) * diff.Diff);
+                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)(placer * diff.Diff);
 
             ulong flipped = move.Flip;
             for (int coord = FindFirstSet(flipped); flipped != 0; coord = FindNextSet(ref flipped))
             {
                 var diffTable = this.featureDiffTable[coord];
                 foreach (var diff in diffTable)
-                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((WHITE - BLACK) * diff.Diff);
+                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)(flipper * diff.Diff);
             }
 
-            this.SideToMove = DiscColor.Black;
+            this.SideToMove = typeof(SideToMove) == typeof(Black) ? DiscColor.White : DiscColor.Black;
+        }
+
+        void Undo<SideToMove>(ref Move move) where SideToMove : struct, IDiscColor
+        {
+            var remover = typeof(SideToMove) == typeof(Black) ? UNREACHABLE_EMPTY - BLACK : UNREACHABLE_EMPTY - WHITE;
+            var flipper = typeof(SideToMove) == typeof(Black) ? WHITE - BLACK : BLACK - WHITE;
+
+            foreach (var diff in this.featureDiffTable[(int)move.Coord])
+                this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)(remover * diff.Diff);
+
+            ulong flipped = move.Flip;
+            for (int coord = FindFirstSet(flipped); flipped != 0; coord = FindNextSet(ref flipped))
+            {
+                var diffTable = this.featureDiffTable[coord];
+                foreach (var diff in diffTable)
+                    this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)(flipper * diff.Diff);
+            }
+
+            this.SideToMove = typeof(SideToMove) == typeof(Black) ? DiscColor.Black : DiscColor.White;
         }
 
         void SetReachableEmpties(ref Span<Move> legalMoves)

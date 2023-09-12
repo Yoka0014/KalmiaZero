@@ -12,7 +12,7 @@ using KalmiaZero.Utils;
 using System.IO;
 using System.Runtime.CompilerServices;
 
-namespace KalmiaZero.Learning
+namespace KalmiaZero.Learn
 {
     public struct ValueFuncOptimizerOptions<WeightType> where WeightType : struct, IFloatingPointIeee754<WeightType>
     {
@@ -221,10 +221,7 @@ namespace KalmiaZero.Learning
                         {
                             var f = features[j];
                             g[f] += delta;
-
-                            var mirrored = mirror[f];
-                            if (mirrored != f)
-                                g[mirrored] += delta;
+                            g[mirror[f]] += delta;  // If f == mirror[f], twice grad is added to g[f], but this is not a problem because AdaGrad is adaptive algorithm.
                         }
                     }
 

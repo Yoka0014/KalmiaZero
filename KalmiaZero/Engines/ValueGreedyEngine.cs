@@ -9,8 +9,6 @@ using KalmiaZero.Reversi;
 
 namespace KalmiaZero.Engines
 {
-    using MultiPV = List<MultiPVItem>;
-
     internal class ValueGreedyEngine : Engine
     {
         PositionFeatureVector? posFeatureVec;
@@ -18,7 +16,7 @@ namespace KalmiaZero.Engines
 
         public ValueGreedyEngine() : base("ValueGreedyEngine", "0.0", "Yoka0014")
         {
-            this.Options.Add("WeightsFilePath", new EngineOption(string.Empty, EngineOptionType.FileName));
+            this.Options.Add("weights_file_path", new EngineOption(string.Empty, EngineOptionType.FileName));
             this.Options.Last().Value.ValueChanged += ValueFuncWeightsPathSpecified;
         }
 

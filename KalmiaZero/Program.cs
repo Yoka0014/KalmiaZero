@@ -1,8 +1,6 @@
 ﻿using System;
 
-using KalmiaZero.Engines;
-using KalmiaZero.Protocols;
-using KalmiaZero.Learning;
+using KalmiaZero.Utils;
 
 namespace KalmiaZero
 {
@@ -10,14 +8,16 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
+            Console.WriteLine(FastMath.Exp2(3.14f));
+            Console.WriteLine(FastMath.Log2(3.14f));
             //var engine = new MCEngine();
             //engine.SetOption("NumPlayouts", "100");
 
-            var engine = new ValueGreedyEngine();
-            engine.SetOption("WeightsFilePath", @"C:\Users\yu_ok\source\repos\KalmiaZero\Weights\value_func_weights.bin");
+            //var engine = new ValueGreedyEngine();
+            //engine.SetOption("WeightsFilePath", @"C:\Users\yu_ok\source\repos\KalmiaZero\Weights\value_func_weights.bin");
 
-            var nboard = new NBoard();
-            nboard.Mainloop(engine);
+            //var nboard = new NBoard();
+            //nboard.Mainloop(engine);
 
             //var nTuples = (from _ in Enumerable.Range(0, 100) select new NTupleInfo(7)).ToArray();
             //var valueFunc = new ValueFunction<double>(new NTuples(nTuples));

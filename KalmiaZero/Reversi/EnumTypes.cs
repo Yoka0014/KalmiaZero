@@ -29,9 +29,9 @@
 
     public enum GameResult
     {
-        Win = 1,
-        Loss = -1,
-        Draw = 0,
-        NotOver = -2
+        Win = 0,
+        Loss = 1,
+        Draw = 2,
+        NotOver = -1
     }
 }
