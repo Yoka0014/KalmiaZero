@@ -78,25 +78,27 @@ namespace KalmiaZero.Search.MCTS
             return this.ChildNodes[idx] = new Node(); 
         }
 
-        public void InitChildNodes() 
+        public Node[] InitChildNodes() 
         {
             Debug.Assert(this.Edges is not null);
-            this.ChildNodes = new Node[this.Edges.Length]; 
+            return this.ChildNodes = new Node[this.Edges.Length]; 
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Expand(Span<Move> moves)
+        public Edge[] Expand(Span<Move> moves)
         {
             if (moves.Length == 0)
             {
                 this.Edges = new Edge[1];
                 this.Edges[0].Move.Coord = BoardCoordinate.Pass;
-                return;
+                return this.Edges;
             }
 
             this.Edges = new Edge[moves.Length];
             for (var i = 0; i < this.Edges.Length; i++)
                 this.Edges[i].Move = moves[i];
+
+            return this.Edges;
         }
     }
 }

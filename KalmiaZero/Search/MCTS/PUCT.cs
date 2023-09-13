@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,8 @@ namespace KalmiaZero.Search.MCTS
     {
         // cite: https://doi.org/10.1145/3293475.3293486
         public const bool ENABLE_EXACT_WIN_MCTS = false;
+
+        public const bool ENABLE_SINGLE_THREAD_MODE = false;
 
         public const bool USE_UNIFORM_POLICY = false;
         public const float PUCT_FACTOR = 1.0f;
@@ -39,7 +42,7 @@ namespace KalmiaZero.Search.MCTS
 
         public bool PriorTo(MoveEvaluation moveEval)
         {
-            var diff = this.PlayoutCount - moveEval.PlayoutCount;
+            var diff = (long)this.PlayoutCount - moveEval.PlayoutCount;
             if (diff != 0)
                 return diff > 0;
             return this.ExpectedReward > moveEval.ExpectedReward;
@@ -193,7 +196,7 @@ namespace KalmiaZero.Search.MCTS
             for (var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
-                childEvals[i] = new MoveEvaluation(GetPV(this.root.ChildNodes?[i]))
+                childEvals[i] = new MoveEvaluation(GetPV(this.root.ChildNodes?[i], edge.Move.Coord))
                 {
                     Move = edge.Move.Coord,
                     Effort = (double)edge.VisitCount / this.root.VisitCount,
@@ -203,7 +206,7 @@ namespace KalmiaZero.Search.MCTS
                 };
             }
 
-            Array.Sort(childEvals, (x, y) => x.PriorTo(y) ? 1 : -1);
+            Array.Sort(childEvals, (x, y) => x.PriorTo(y) ? -1 : 1);
 
             return new SearchInfo(rootEval, childEvals);
         }
@@ -237,7 +240,7 @@ namespace KalmiaZero.Search.MCTS
             var extraTimeMs = extraTimeCs * 10;
             this.searchStartTime = Environment.TickCount;
 
-            var searchTasks = new Task[this.numThreads];
+            var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
             for(var i = 0; i < searchTasks.Length; i++)
             {
                 var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
@@ -399,16 +402,17 @@ namespace KalmiaZero.Search.MCTS
             return (bestIdx, secondBestIdx);
         }
 
-        IEnumerable<BoardCoordinate> GetPV(Node? node)
+        IEnumerable<BoardCoordinate> GetPV(Node? node, BoardCoordinate prevMove = BoardCoordinate.Null)
         {
+            if(prevMove != BoardCoordinate.Null)
+                yield return prevMove;
+
             if (node is null || node.Edges is null)
                 yield break;
 
             var childIdx = SelectBestChildNode(node);
-            yield return node.Edges[childIdx].Move.Coord;
-
             var childNode = node.ChildNodes?[childIdx];
-            foreach (var move in GetPV(childNode))
+            foreach (var move in GetPV(childNode, node.Edges[childIdx].Move.Coord))
                 yield return move;
         }
 
@@ -419,7 +423,6 @@ namespace KalmiaZero.Search.MCTS
             if (!this.root.IsExpanded)
             {
                 var gameInfo = new GameInfo(this.rootState, this.valueFunc.NTuples);
-                Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
                 this.root.Expand(gameInfo.Moves);
 
                 Debug.Assert(this.root.Edges is not null);
@@ -470,138 +473,114 @@ namespace KalmiaZero.Search.MCTS
 
         double VisitNode<AfterPass>(int threadID, ref GameInfo game, Node node, ref Edge edgeToNode) where AfterPass : struct, IFlag
         {
-            var locked = false;
+            var lockTaken = false;
             try
             {
-                Monitor.Enter(node, ref locked);
+                Monitor.Enter(node, ref lockTaken);
 
-                if (!node.IsExpanded)   // first visit
+                double reward;
+                Edge[] edges;
+                if (node.Edges is null) // need to expand
                 {
                     if (typeof(AfterPass) == typeof(False))
-                    {
-                        game.Position.GenerateMove(ref edgeToNode.Move);
                         game.Update(ref edgeToNode.Move);
-                    }
                     else
                         game.Pass();
 
-                    node.Expand(game.Moves);
+                    edges = node.Expand(game.Moves);
 
-                    Debug.Assert(node.Edges is not null);
-
-                    Edge[] edges = node.Edges;
-                    if (game.Moves.Length != 0)
-                    {
+                    if(game.Moves.Length != 0)
                         SetPolicyProbsAndValues(ref game, edges);
-                        this.nodeCountPerThread[threadID]++;
-                        ref var childEdge = ref edges[SelectChildNode(node, ref edgeToNode)];
-                        AddVirtualLoss(node, ref childEdge);
-
-                        Monitor.Exit(node);
-                        locked = false;
-
-                        var value = (double)childEdge.Value;
-                        UpdateNodeStats(node, ref childEdge, value);
-                        return 1.0 - value;
-                    }
-                    else    // pass
-                    {
-                        if (typeof(AfterPass) == typeof(True)) // game over
-                        {
-                            GameResult res = game.Position.GetGameResult();
-                            edges[0].Label = (EdgeLabel)res | EdgeLabel.Proved;
-                            edgeToNode.Label = (EdgeLabel)TO_OPPONENT_GAME_RESULT[(int)res] | EdgeLabel.Proved;
-
-                            Monitor.Exit(node);
-                            locked = false;
-
-                            double reward = GAME_RESULT_TO_REWARD[(int)res];
-                            UpdatePassNodeStats(node, ref edges[0], reward);
-                            return 1.0 - reward;
-                        }
-                        else
-                        {
-                            node.InitChildNodes();
-                            node.CreateChildNode(0);
-
-                            Debug.Assert(node.ChildNodes is not null);
-
-                            Monitor.Exit(node);
-                            locked = false;
-
-                            var reward = VisitNode<True>(threadID, ref game, node.ChildNodes[0], ref node.Edges[0]);
-                            UpdatePassNodeStats(node, ref edges[0], reward);
-                            return 1.0 - reward;
-                        }
-                    }
                 }
                 else
                 {
-                    Debug.Assert(node.Edges is not null);
-
                     if (typeof(AfterPass) == typeof(False))
-                        game.Update(ref edgeToNode.Move);
+                        game.Update(ref edgeToNode.Move, node.Edges);
                     else
-                        game.Pass();
+                        game.Pass(node.Edges);
 
-                    double reward;
-                    Edge[] edges = node.Edges;
-                    if (typeof(AfterPass) == typeof(False) && edges[0].Move.Coord == BoardCoordinate.Pass)
+                    edges = node.Edges;
+                }
+
+                if(game.Moves.Length == 0)  // pass
+                {
+                    if (typeof(AfterPass) == typeof(True))  // gameover
                     {
-                        if (edges[0].IsProved)
+                        GameResult res = game.Position.GetGameResult();
+                        edges[0].Label = (EdgeLabel)res | EdgeLabel.Proved;
+                        edgeToNode.Label = (EdgeLabel)TO_OPPONENT_GAME_RESULT[(int)res] | EdgeLabel.Proved;
+
+                        Monitor.Exit(node);
+                        lockTaken = false;
+
+                        reward = GAME_RESULT_TO_REWARD[(int)res];
+                    }
+                    else if (edges[0].IsProved)
+                    {
+                        Monitor.Exit(node);
+                        lockTaken = false;
+
+                        reward = GAME_RESULT_TO_REWARD[(int)(edges[0].Label ^ EdgeLabel.Proved)];
+                    }
+                    else
+                    {
+                        Node childNode;
+                        if (node.ChildNodes is null)
                         {
-                            Monitor.Exit(node);
-                            locked = false;
-                            reward = GAME_RESULT_TO_REWARD[(int)(edges[0].Label ^ EdgeLabel.Proved)];
-                            UpdatePassNodeStats(node, ref edges[0], reward);
-                            return 1.0 - reward;
+                            node.InitChildNodes();
+                            childNode = node.CreateChildNode(0);
                         }
                         else
-                        {
-                            Monitor.Exit(node);
-                            locked = false;
-
-                            Debug.Assert(node.ChildNodes is not null && node.ChildNodes[0] is not null);
-
-                            reward = VisitNode<True>(threadID, ref game, node.ChildNodes[0], ref edges[0]);
-                            UpdatePassNodeStats(node, ref edges[0], reward);
-                            return 1.0 - reward;
-                        }
-                    }
-
-                    var childIdx = SelectChildNode(node, ref edgeToNode); 
-                    ref var childEdge = ref edges[childIdx];
-
-                    if (childEdge.IsProved)
-                    {
-                        Monitor.Exit(node);
-                        locked = false;
-
-                        reward = GAME_RESULT_TO_REWARD[(int)(childEdge.Label ^ EdgeLabel.Proved)];
-                    }
-                    else
-                    {
-                        if (!node.ChildNodeWasInitialized)
-                            node.InitChildNodes();
-
-                        Debug.Assert(node.ChildNodes is not null);
-
-                        var childNode = node.ChildNodes[childIdx];
-                        childNode ??= node.CreateChildNode(childIdx);
+                            childNode = node.ChildNodes[0];
 
                         Monitor.Exit(node);
-                        locked = false;
+                        lockTaken = false;
 
-                        reward = VisitNode<False>(threadID, ref game, childNode, ref childEdge);
+                        reward = VisitNode<True>(threadID, ref game, childNode, ref edges[0]);
                     }
 
-                    UpdateNodeStats(node, ref childEdge, reward);
+                    UpdatePassNodeStats(node, ref edges[0], reward);
                     return 1.0 - reward;
                 }
+
+                // not pass
+                var childIdx = SelectChildNode(node, ref edgeToNode);
+                ref var childEdge = ref edges[childIdx];
+                var isFirstVisit = childEdge.VisitCount == 0;
+                AddVirtualLoss(node, ref childEdge);
+
+                if (isFirstVisit)
+                {
+                    Monitor.Exit(node);
+                    lockTaken = false;
+
+                    this.nodeCountPerThread[threadID]++;
+                    reward = (double)childEdge.Value;
+                }
+                else if (childEdge.IsProved)
+                {
+                    Monitor.Exit(node);
+                    lockTaken = false;
+
+                    reward = GAME_RESULT_TO_REWARD[(int)(childEdge.Label ^ EdgeLabel.Proved)];
+                }
+                else
+                {
+                    Node[] childNodes = node.ChildNodes is null ? node.InitChildNodes() : node.ChildNodes;
+                    var childNode = childNodes[childIdx] ?? node.CreateChildNode(childIdx);
+
+                    Monitor.Exit(node);
+                    lockTaken = false;
+
+                    reward = VisitNode<False>(threadID, ref game, childNode, ref childEdge);
+                }
+
+                UpdateNodeStats(node, ref childEdge, reward);
+                return 1.0 - reward;
             }
             finally
             {
-                if (locked)
+                if (lockTaken)
                     Monitor.Exit(node);
             }
         }
@@ -643,7 +622,7 @@ namespace KalmiaZero.Search.MCTS
 
                 // calculate PUCB score.
                 var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
-                var u = PUCT_FACTOR * (float)edge.PolicyProb * MathF.Sqrt(sqrtSum / (1.0f + edge.VisitCount));
+                var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtSum / (1.0f + edge.VisitCount);
                 var score = q + u;
 
                 if(score > maxScore)
@@ -699,7 +678,7 @@ namespace KalmiaZero.Search.MCTS
 
                 // calculate PUCB score.
                 var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
-                var u = PUCT_FACTOR * (float)edge.PolicyProb * MathF.Sqrt(sqrtSum / (1.0f + edge.VisitCount));
+                var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtSum / (1.0f + edge.VisitCount);
                 var score = q + u;
 
                 if (score > maxScore)
@@ -753,13 +732,14 @@ namespace KalmiaZero.Search.MCTS
             for(var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
-                Move move = game.Moves[i];
+                ref Move move = ref game.Moves[i];
                 game.Position.GenerateMove(ref move);
-                game.Update(ref move);
+                edge.Move = move;
+                game.Update(ref edge.Move);
                 edge.Value = Half.One - this.valueFunc.Predict(game.FeatureVector);
                 edge.PolicyProb = !USE_UNIFORM_POLICY ? Half.Exp(edge.Value) : uniformProb;
                 expValueSum += edge.PolicyProb;
-                game.Undo(ref move);
+                game.Undo(ref edge.Move, edges);
             }
 
             if (!USE_UNIFORM_POLICY)

@@ -1,4 +1,6 @@
-﻿global using FeatureType = System.UInt16;
+﻿//#define ENABLE_FEATURES_VALIDATION_CHECK
+
+global using FeatureType = System.UInt16;
 
 using System;
 using System.Collections.Generic;
@@ -6,6 +8,7 @@ using System.Runtime.CompilerServices;
 
 using KalmiaZero.Utils;
 using KalmiaZero.Reversi;
+using System.Diagnostics;
 
 namespace KalmiaZero.NTuple
 {
@@ -42,7 +45,6 @@ namespace KalmiaZero.NTuple
         Updator playerRestorer;
         Updator opponentRestorer;
 
-
         readonly Move[] prevLegalMoves = new Move[MAX_NUM_MOVES];
         int numPrevLegalMoves = 0;
 
@@ -56,7 +58,7 @@ namespace KalmiaZero.NTuple
 
             (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
             (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
-
+            
             InitFeatureDiffTable();
         }
 
@@ -123,10 +125,16 @@ namespace KalmiaZero.NTuple
         public void Init(ref Position pos, Span<Move> legalMoves)
         {
             this.SideToMove = pos.SideToMove;
-            if(this.SideToMove == DiscColor.Black)
+            if (this.SideToMove == DiscColor.Black)
+            {
                 (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
+                (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
+            }
             else
+            {
                 (this.playerUpdator, this.opponentUpdator) = (Update<White>, Update<Black>);
+                (this.playerRestorer, this.opponentRestorer) = (Undo<Black>, Undo<White>);
+            }
 
             if (NUM_SQUARE_STATES == 4)
             {
@@ -191,6 +199,8 @@ namespace KalmiaZero.NTuple
                 legalMoves.CopyTo(this.prevLegalMoves);
                 this.numPrevLegalMoves = legalMoves.Length;
             }
+
+            AssertFeaturesAreValid();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -203,12 +213,14 @@ namespace KalmiaZero.NTuple
             (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
             (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
 
-            if(NUM_SQUARE_STATES == 4)
+            if (NUM_SQUARE_STATES == 4)
             {
                 SetReachableEmpties(ref legalMoves);
                 legalMoves.CopyTo(this.prevLegalMoves);
                 this.numPrevLegalMoves = legalMoves.Length;
             }
+
+            AssertFeaturesAreValid();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -225,9 +237,11 @@ namespace KalmiaZero.NTuple
             this.SideToMove = Reversi.Utils.ToOpponentColor(this.SideToMove);
             (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
             (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
+
+            AssertFeaturesAreValid();
         }
 
-        void Update<SideToMove>(ref Move move) where SideToMove : struct, IDiscColor
+        unsafe void Update<SideToMove>(ref Move move) where SideToMove : struct, IDiscColor
         {
             var placer = typeof(SideToMove) == typeof(Black) ? BLACK - UNREACHABLE_EMPTY : WHITE - UNREACHABLE_EMPTY;
             var flipper = typeof(SideToMove) == typeof(Black) ? BLACK - WHITE : WHITE - BLACK;
@@ -283,6 +297,19 @@ namespace KalmiaZero.NTuple
                 foreach (var diff in diffTable)
                     this.features[diff.FeatureID.TupleID][diff.FeatureID.Idx] += (FeatureType)((UNREACHABLE_EMPTY - REACHABLE_EMPTY) * diff.Diff);
             }
+        }
+
+        void AssertFeaturesAreValid()
+        {
+#if DEBUG && ENABLE_FEATURES_VALIDATION_CHECK
+            for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
+            {
+                ReadOnlySpan<NTupleInfo> tuples = this.NTuples.Tuples;
+                FeatureType[] f = this.features[nTupleID];
+                for (var i = 0; i < tuples[nTupleID].NumSymmetricExpansions; i++)
+                    Debug.Assert(f[i] >= 0 && f[i] < this.NTuples.NumPossibleFeatures[nTupleID]);
+            }
+#endif
         }
 
         struct FeatureDiff 

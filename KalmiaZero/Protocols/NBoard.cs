@@ -13,7 +13,6 @@ using KalmiaZero.Reversi;
 namespace KalmiaZero.Protocols
 {
     using CommandHandler = Action<Tokenizer>;
-    using MultiPV = List<MultiPVItem>;
 
     public class NBoard : IProtocol
     {
@@ -163,7 +162,12 @@ namespace KalmiaZero.Protocols
                 }
 
                 if (pv.EvalScore.HasValue)
-                    sb.Append($" {pv.EvalScore.Value:f2}");
+                {
+                    if(pv.EvalScoreType != EvalScoreType.WinRate)
+                        sb.Append($" {pv.EvalScore.Value:f2}");
+                    else
+                        sb.Append($" {pv.EvalScore.Value - 50.0f:f2}");
+                }
                 else
                     sb.Append(' ').Append(0);
 
@@ -192,8 +196,13 @@ namespace KalmiaZero.Protocols
             else
                 sb.Append(move.Coord);
 
-            if(move.EvalScore.HasValue)
-                sb.Append('/').Append(move.EvalScore.Value);
+            if (move.EvalScore.HasValue)
+            {
+                if(move.EvalScoreType != EvalScoreType.WinRate)
+                    sb.Append('/').Append(move.EvalScore.Value);
+                else
+                    sb.Append('/').Append(move.EvalScore.Value - 50.0);
+            }
 
             if (move.EllapsedMs.HasValue)
                 sb.Append('/').Append(move.EllapsedMs.Value);

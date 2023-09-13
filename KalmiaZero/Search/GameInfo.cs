@@ -75,6 +75,14 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Undo(ref Move move, Edge[] edges)
+        {
+            this.Position.Undo(ref move);
+            InitMoves(edges);
+            this.FeatureVector.Undo(ref move, this.Moves);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void InitMoves()
         {
             var moves = this.moves.AsSpan();
@@ -84,6 +92,12 @@ namespace KalmiaZero.Search
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void InitMoves(Edge[] edges)
         {
+            if (edges[0].Move.Coord == BoardCoordinate.Pass)
+            {
+                this.numMoves = 0;
+                return;
+            }
+
             for (var i = 0; i < edges.Length; i++)
                 this.moves[i] = edges[i].Move;
             this.numMoves = edges.Length;
