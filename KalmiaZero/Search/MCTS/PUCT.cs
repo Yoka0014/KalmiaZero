@@ -72,7 +72,7 @@ namespace KalmiaZero.Search.MCTS
 
     public class PUCT
     {
-        const float EPSILON = 1.0e-7f;
+        const float EPSILON = 1.0e-6f;
         static ReadOnlySpan<GameResult> TO_OPPONENT_GAME_RESULT => new GameResult[3] { GameResult.Loss, GameResult.Win, GameResult.Draw };
         static ReadOnlySpan<double> GAME_RESULT_TO_REWARD => new double[3] { 1.0, 0.0, 0.5 };
 
@@ -208,14 +208,14 @@ namespace KalmiaZero.Search.MCTS
             return new SearchInfo(rootEval, childEvals);
         }
 
-        public async Task<SearchEndStatus> SearchAsync(uint numPlayouts, int timeLimitMs, int extraTimeMs, Action<SearchEndStatus> searchEndCallback)
+        public async Task<SearchEndStatus> SearchAsync(uint numPlayouts, int timeLimitCs, int extraTimeCs, Action<SearchEndStatus> searchEndCallback)
         {
             this.cts = new CancellationTokenSource();
             this.isSearching = true;
 
             var status = await Task.Run(() =>
             {
-                var status = Search(numPlayouts, timeLimitMs, extraTimeMs);
+                var status = Search(numPlayouts, timeLimitCs, extraTimeCs);
                 searchEndCallback(status);
                 return status;
             }).ConfigureAwait(false);
@@ -238,10 +238,11 @@ namespace KalmiaZero.Search.MCTS
             this.searchStartTime = Environment.TickCount;
 
             var searchTasks = new Task[this.numThreads];
-            for(var threadID = 0; threadID < searchTasks.Length; threadID++)
+            for(var i = 0; i < searchTasks.Length; i++)
             {
                 var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-                searchTasks[threadID] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
+                var threadID = i;
+                searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
             }
 
             SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
@@ -259,6 +260,7 @@ namespace KalmiaZero.Search.MCTS
 
         void SearchWorker(int threadID, ref GameInfo game, CancellationToken ct)
         {
+            var g = new GameInfo(this.valueFunc.NTuples);
             while (!ct.IsCancellationRequested)
             {
                 if (Interlocked.Increment(ref this.playoutCount) > this.maxPlayoutCount)
@@ -267,7 +269,6 @@ namespace KalmiaZero.Search.MCTS
                     continue;
                 }
 
-                var g = new GameInfo();
                 game.CopyTo(ref g);
                 VisitRootNode(threadID, ref g);
             }
@@ -472,13 +473,15 @@ namespace KalmiaZero.Search.MCTS
             var locked = false;
             try
             {
-                Monitor.Enter(node);
-                locked = true;
+                Monitor.Enter(node, ref locked);
 
                 if (!node.IsExpanded)   // first visit
                 {
                     if (typeof(AfterPass) == typeof(False))
+                    {
+                        game.Position.GenerateMove(ref edgeToNode.Move);
                         game.Update(ref edgeToNode.Move);
+                    }
                     else
                         game.Pass();
 
@@ -536,11 +539,39 @@ namespace KalmiaZero.Search.MCTS
                 {
                     Debug.Assert(node.Edges is not null);
 
+                    if (typeof(AfterPass) == typeof(False))
+                        game.Update(ref edgeToNode.Move);
+                    else
+                        game.Pass();
+
+                    double reward;
                     Edge[] edges = node.Edges;
+                    if (typeof(AfterPass) == typeof(False) && edges[0].Move.Coord == BoardCoordinate.Pass)
+                    {
+                        if (edges[0].IsProved)
+                        {
+                            Monitor.Exit(node);
+                            locked = false;
+                            reward = GAME_RESULT_TO_REWARD[(int)(edges[0].Label ^ EdgeLabel.Proved)];
+                            UpdatePassNodeStats(node, ref edges[0], reward);
+                            return 1.0 - reward;
+                        }
+                        else
+                        {
+                            Monitor.Exit(node);
+                            locked = false;
+
+                            Debug.Assert(node.ChildNodes is not null && node.ChildNodes[0] is not null);
+
+                            reward = VisitNode<True>(threadID, ref game, node.ChildNodes[0], ref edges[0]);
+                            UpdatePassNodeStats(node, ref edges[0], reward);
+                            return 1.0 - reward;
+                        }
+                    }
+
                     var childIdx = SelectChildNode(node, ref edgeToNode); 
                     ref var childEdge = ref edges[childIdx];
 
-                    double reward;
                     if (childEdge.IsProved)
                     {
                         Monitor.Exit(node);
@@ -611,7 +642,7 @@ namespace KalmiaZero.Search.MCTS
                 }
 
                 // calculate PUCB score.
-                var q = (float)edge.ExpectedReward;
+                var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
                 var u = PUCT_FACTOR * (float)edge.PolicyProb * MathF.Sqrt(sqrtSum / (1.0f + edge.VisitCount));
                 var score = q + u;
 
@@ -667,7 +698,7 @@ namespace KalmiaZero.Search.MCTS
                 }
 
                 // calculate PUCB score.
-                var q = (float)edge.ExpectedReward;
+                var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
                 var u = PUCT_FACTOR * (float)edge.PolicyProb * MathF.Sqrt(sqrtSum / (1.0f + edge.VisitCount));
                 var score = q + u;
 
@@ -722,11 +753,13 @@ namespace KalmiaZero.Search.MCTS
             for(var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
-                game.Position.GenerateMove(ref game.Moves[i]);
-                game.Update(ref game.Moves[i]);
+                Move move = game.Moves[i];
+                game.Position.GenerateMove(ref move);
+                game.Update(ref move);
                 edge.Value = Half.One - this.valueFunc.Predict(game.FeatureVector);
                 edge.PolicyProb = !USE_UNIFORM_POLICY ? Half.Exp(edge.Value) : uniformProb;
                 expValueSum += edge.PolicyProb;
+                game.Undo(ref move);
             }
 
             if (!USE_UNIFORM_POLICY)
@@ -758,11 +791,8 @@ namespace KalmiaZero.Search.MCTS
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static void UpdatePassNodeStats(Node parent, ref Edge childEdge, double reward)
         {
-            if (VIRTUAL_LOSS != 1)
-            {
-                Interlocked.Add(ref parent.VisitCount, unchecked(1 - VIRTUAL_LOSS));
-                Interlocked.Add(ref childEdge.VisitCount, unchecked(1 - VIRTUAL_LOSS));
-            }
+            Interlocked.Increment(ref parent.VisitCount);
+            Interlocked.Increment(ref childEdge.VisitCount);
             AtomicOperations.Add(ref childEdge.RewardSum, reward);
         }
     }

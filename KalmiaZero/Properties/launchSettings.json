@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "KalmiaZero": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Users\\yu_ok\\source\\repos\\KalmiaZero\\DebugWorkDir\\"
+    }
+  }
+}

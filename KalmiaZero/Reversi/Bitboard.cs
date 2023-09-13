@@ -129,7 +129,7 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Undo(BoardCoordinate coord, ulong flip)
         {
-            ulong player = this.Player;
+            ulong player = this.Player ^ flip;
             this.Player = this.Opponent ^ (Utils.COORD_TO_BIT[(int)coord] | flip);
             this.Opponent = player | flip;
         }

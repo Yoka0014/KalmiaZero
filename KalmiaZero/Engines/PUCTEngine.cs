@@ -25,7 +25,6 @@ namespace KalmiaZero.Engines
 
     internal class PUCTEngine : Engine
     {
-        EngineOptions options = new();
         StreamWriter logger;
 
         PUCT? tree;
@@ -44,51 +43,54 @@ namespace KalmiaZero.Engines
                 this.logger = new StreamWriter(logFilePath);
 
             InitOptions();
-            this.rand = new Random(this.options["rand_seed"].CurrentValue);
-            OnValueFuncWeightsPathSpecified(this, Path.Combine(PARAMS_DIR, DEFAULT_VALUE_FUNC_WEIGHTS_FILE_NAME));
+            this.rand = new Random((int)this.Options["rand_seed"].CurrentValue);
         }
 
         void InitOptions()
         {
             EngineOption option;
 
-            this.options["latency_ms"] = new EngineOption(50, 0, int.MaxValue);
+            this.Options["latency_ms"] = new EngineOption(50, 0, int.MaxValue);
 
             var weightsPath = Path.Combine(PARAMS_DIR, DEFAULT_VALUE_FUNC_WEIGHTS_FILE_NAME);
             option = new EngineOption(weightsPath, EngineOptionType.FileName);
             option.ValueChanged += OnValueFuncWeightsPathSpecified;
-            this.options["value_func_weights_path"] = option;
+            this.Options["value_func_weights_path"] = option;
 
             option = new EngineOption(Environment.ProcessorCount, 1, Environment.ProcessorCount);
             option.ValueChanged += OnNumThreadsChanged;
-            this.options["num_threads"] = option;
+            this.Options["num_threads"] = option;
 
             option = new EngineOption(5000_000, 100, uint.MaxValue);
             option.ValueChanged += OnNumNodesLimitChanged;
-            this.options["num_nodes_limit"] = option;
+            this.Options["num_nodes_limit"] = option;
 
-            this.options["num_playouts"] = new EngineOption(3200000, 10, uint.MaxValue);
-            this.options["num_stochastic_moves"] = new EngineOption(0, 0, Constants.NUM_SQUARES - 4);
-            this.options["softmax_temperature"] = new EngineOption(1000, 0, long.MaxValue);
+            this.Options["num_playouts"] = new EngineOption(3200000, 10, uint.MaxValue);
+            this.Options["num_stochastic_moves"] = new EngineOption(0, 0, Constants.NUM_SQUARES - 4);
+            this.Options["softmax_temperature"] = new EngineOption(1000, 0, long.MaxValue);
 
             option = new EngineOption(Random.Shared.Next(), 0, int.MaxValue);
             option.ValueChanged += (s, e) => { lock (this.rand) this.rand = new Random(e); };
-            this.options["rand_seed"] = option;
+            this.Options["rand_seed"] = option;
 
-            this.options["reuse_subtree"] = new EngineOption(true);
-            this.options["enable_pondering"] = new EngineOption(false);
+            this.Options["reuse_subtree"] = new EngineOption(false);
+            this.Options["enable_extra_search"] = new EngineOption(false);
+            this.Options["enable_early_stopping"] = new EngineOption(false);
+            this.Options["enable_pondering"] = new EngineOption(false);
+            this.Options["show_search_info_interval_cs"] = new EngineOption(10, 1, 6000);
 
             option = new EngineOption(Path.Combine(LOG_DIR, "puct.log"), EngineOptionType.FileName);
             option.ValueChanged += OnThoughtLogPathChanged;
-            this.options["thought_log_path"] = option;
+            this.Options["thought_log_path"] = option;
 
-            this.options["show_log"] = new EngineOption(false);
+            this.Options["show_log"] = new EngineOption(false);
         }
 
         public override void Quit() 
         {
             if (this.tree is not null && this.tree.IsSearching)
                 this.tree.SendStopSearchSignal();
+            this.logger.Close();
         }
 
         public override void SetMainTime(DiscColor color, int mainTimeMs)
@@ -136,7 +138,7 @@ namespace KalmiaZero.Engines
             timer.IncrementMs = incMs;
         }
 
-        public override void SetLevel(int level) => this.options["num_playouts"].CurrentValueString = (8U << level).ToString();
+        public override void SetLevel(int level) => this.Options["num_playouts"].CurrentValueString = (8U << level).ToString();
 
         public override void SetBookContempt(int contempt) { }
         public override void AddCurrentGameToBook() { }
@@ -195,7 +197,7 @@ namespace KalmiaZero.Engines
             StopIfPondering();
             this.searchTask?.Wait();
 
-            if (!this.options["reuse_subtree"].CurrentValue || !this.tree.TransitionRootStateToChildState(this.MoveHistory[^1].Coord))
+            if (!this.Options["reuse_subtree"].CurrentValue || !this.tree.TransitionRootStateToChildState(this.MoveHistory[^1].Coord))
             {
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
@@ -235,56 +237,42 @@ namespace KalmiaZero.Engines
             WriteLog("Recieved stop signal.\n");
 
             this.tree.SendStopSearchSignal();
-            return this.searchTask.Wait(timeoutMs));
+            return this.searchTask.Wait(timeoutMs);
         }
 
         protected override bool OnReady()
         {
-
-        }
-
-        protected override void OnStartGame() 
-        {
-
-        }
-
-        protected override void OnEndGame() 
-        {
-
-        }
-
-        protected override void OnClearedPosition()
-        { 
-
-        }
-
-        void OnValueFuncWeightsPathSpecified(object? sender, dynamic e)
-        {
-            if(this.State == EngineState.NotReady)
+            string valueFuncWeightsPath = this.Options["value_func_weights_path"].CurrentValue;
+            if (!File.Exists(valueFuncWeightsPath))
             {
-                SendErrorMessage($"Cannot set the value of \"value_func_weights_path\" because engine is not ready state.");
-                return;
+                SendErrorMessage($"Cannot find value func weights file: \"{valueFuncWeightsPath}\".");
+                return false;
             }
 
-            string path = e;
-
-            if (!File.Exists(path))
-            {
-                SendErrorMessage($"Cannot find a weights file of value function at \"{path}\".");
-                return;
-            }
+            var logPath = this.Options["thought_log_path"].CurrentValueString;
+            if (!string.IsNullOrEmpty(logPath))
+                this.logger = new StreamWriter(logPath);
+            else
+                this.logger = new StreamWriter(Stream.Null);
 
             try
             {
-                this.tree = new PUCT(ValueFunction<Half>.LoadFromFile(path));
+                this.tree = new PUCT(ValueFunction<Half>.LoadFromFile(valueFuncWeightsPath));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }
             catch (InvalidDataException ex)
             {
                 SendErrorMessage(ex.Message);
+                return false;
             }
+
+            return true;
         }
+
+        protected override void OnStartGame() { }
+
+        protected override void OnEndGame() { }
 
         void StopIfPondering()
         {
@@ -316,9 +304,11 @@ namespace KalmiaZero.Engines
             WriteLog("Start search.\n");
 
             this.tree.SearchInfoWasSent += (s, e) => SendSearchInfo(e);
-            this.tree.EnableEarlyStopping = this.options["enable_early_stopping"].CurrentValue;
-            uint numPlayouts = this.options["num_playouts"].CurrentValue;
-            this.searchTask = this.tree.SearchAsync(numPlayouts, int.MaxValue, 0, searchEndCallback);
+            this.tree.SearchInfoSendIntervalCs = (int)this.Options["show_search_info_interval_cs"].CurrentValue;
+            this.tree.EnableEarlyStopping = this.Options["enable_early_stopping"].CurrentValue;
+            uint numPlayouts = (uint)this.Options["num_playouts"].CurrentValue;
+            (var mainTimeMs, var extraTimeMs) = AllocateTime(this.Position.SideToMove);
+            this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
 
             void searchEndCallback(SearchEndStatus status)
             {
@@ -340,9 +330,9 @@ namespace KalmiaZero.Engines
             var childEvals = searchInfo.ChildEvals;
             var selectedIdx = 0;
             var moveNum = (Constants.NUM_SQUARES - 4) - this.Position.EmptySquareCount + 1;
-            if(moveNum <= this.options["num_stochastic_moves"].CurrentValue)
+            if(moveNum <= this.Options["num_stochastic_moves"].CurrentValue)
             {
-                var tInv = 1.0 / (this.options["softmax_temperature"].CurrentValue * 1.0e-3);
+                var tInv = 1.0 / (this.Options["softmax_temperature"].CurrentValue * 1.0e-3);
                 var indices = Enumerable.Range(0, childEvals.Length).ToArray();
                 var expPlayoutCount = new double[childEvals.Length];
                 var expPlayoutCountSum = 0.0;
@@ -370,7 +360,11 @@ namespace KalmiaZero.Engines
             return new EngineMove(selected.Move, selected.ExpectedReward * 100.0, EvalScoreType.WinRate, this.tree?.SearchEllapsedMs);
         }
 
-
+        (int mainTimeMs, int extraTimeMs) AllocateTime(DiscColor color)
+        {
+            // TODO: 時間管理は探索のデバッグが済んでから実装.
+            return (int.MaxValue, this.Options["enable_extra_search"].CurrentValue ? int.MaxValue : 0);
+        }
 
         void SendSearchInfo(SearchInfo? searchInfo)
         {
@@ -447,24 +441,75 @@ namespace KalmiaZero.Engines
         void WriteLog(string msg)
         {
             this.logger.Write(msg);
-            if (this.options["show_log"].CurrentValue)
+            if (this.Options["show_log"].CurrentValue)
                 Console.Write(msg);
             this.logger.Flush();
         }
 
+        void OnValueFuncWeightsPathSpecified(object? sender, dynamic e)
+        {
+            if (this.State == EngineState.NotReady)
+            {
+                SendErrorMessage($"Cannot set the value of \"value_func_weights_path\" because engine is not ready state.");
+                return;
+            }
+
+            string path = e;
+
+            if (!File.Exists(path))
+            {
+                SendErrorMessage($"Cannot find a weights file of value function at \"{path}\".");
+                return;
+            }
+
+            try
+            {
+                this.tree = new PUCT(ValueFunction<Half>.LoadFromFile(path));
+                var pos = this.Position;
+                this.tree.SetRootState(ref pos);
+            }
+            catch (InvalidDataException ex)
+            {
+                SendErrorMessage(ex.Message);
+            }
+        }
+
+
         void OnNumThreadsChanged(object? sender, dynamic e)
         {
-            throw new NotImplementedException();
+            if(this.tree is null)
+            {
+                SendErrorMessage("Specifiy weights file path of value function.");
+                return;
+            }
+
+            if (this.tree.IsSearching)
+            {
+                SendErrorMessage("Cannot set the number of threads while searching.");
+                return;
+            }
+
+            this.tree.NumThreads = (int)e;
         }
 
         void OnNumNodesLimitChanged(object? sender, dynamic e)
         {
-            throw new NotImplementedException();
+            if (this.tree is null)
+            {
+                SendErrorMessage("Specifiy weights file path of value function.");
+                return;
+            }
+
+            this.tree.NumNodesLimit = e;
         }
 
         void OnThoughtLogPathChanged(object? sender, dynamic e)
         {
-            throw new NotImplementedException();
+            lock (this.logger)
+            {
+                this.logger.Close();
+                this.logger = new StreamWriter(this.Options["thought_log_path"].CurrentValue);
+            }
         }
     }
 }

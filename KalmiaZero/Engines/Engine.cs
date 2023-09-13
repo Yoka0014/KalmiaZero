@@ -142,13 +142,6 @@ namespace KalmiaZero.Engines
             OnInitializedPosition();
         }
 
-        public void ClearPosition()
-        {
-            this.position = new Position();
-            this.moveHistory.Clear();
-            OnClearedPosition();
-        }
-
         public bool UpdatePosition(DiscColor color, BoardCoordinate moveCoord)
         {
             if (color != this.position.SideToMove)
@@ -224,7 +217,6 @@ namespace KalmiaZero.Engines
         protected abstract void OnStartGame();
         protected abstract void OnEndGame();
         protected abstract void OnInitializedPosition();
-        protected abstract void OnClearedPosition();
         protected abstract void OnUpdatedPosition();
         protected abstract void OnUndidPosition();
     }

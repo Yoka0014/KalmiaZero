@@ -204,6 +204,8 @@ namespace KalmiaZero.Protocols
 
         void ExecuteNboardCommand(Tokenizer tokenizer)
         {
+            Debug.Assert(engine is not null);
+
             var token = tokenizer.ReadNext();
             if(!int.TryParse(token, out int version))
             {
@@ -217,9 +219,8 @@ namespace KalmiaZero.Protocols
                 return;
             }
 
-            this.engine?.Ready();
-
-            Succeed($"set myname {this.engine?.Name}");
+            if(this.engine.Ready())
+                Succeed($"set myname {this.engine?.Name}");
         }
 
         void ExecuteSetCommand(Tokenizer tokenizer)

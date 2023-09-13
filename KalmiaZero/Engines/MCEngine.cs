@@ -66,13 +66,12 @@ namespace KalmiaZero.Engines
                 var multiPV = new MultiPV();
                 for (var i = 0; i < nextMoves.Length; i++)
                 {
-                    multiPV.Add(new MultiPVItem
+                    multiPV.Add(new MultiPVItem(new BoardCoordinate[1] { nextMoves[i] })
                     {
                         Depth = 0,
                         EvalScore = values[i] * 100.0,
-                        EvalScoreType = EvalScoreType.WinRate
+                        EvalScoreType = EvalScoreType.WinRate,
                     });
-                    multiPV.Last().PrincipalVariation.Add(nextMoves[i]);
                 }
                 SendMultiPV(multiPV);
 
@@ -107,7 +106,6 @@ namespace KalmiaZero.Engines
         protected override void OnStartGame() { }
         protected override void OnEndGame() { }
         protected override void OnInitializedPosition() { }
-        protected override void OnClearedPosition() { }
         protected override void OnUpdatedPosition() { }
         protected override void OnUndidPosition() { }
 
