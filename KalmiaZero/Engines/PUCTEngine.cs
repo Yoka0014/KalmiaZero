@@ -77,7 +77,7 @@ namespace KalmiaZero.Engines
             this.Options["enable_extra_search"] = new EngineOption(false);
             this.Options["enable_early_stopping"] = new EngineOption(false);
             this.Options["enable_pondering"] = new EngineOption(false);
-            this.Options["show_search_info_interval_cs"] = new EngineOption(10, 1, 6000);
+            this.Options["show_search_info_interval_cs"] = new EngineOption(50, 1, 6000);
 
             option = new EngineOption(Path.Combine(LOG_DIR, "puct.log"), EngineOptionType.FileName);
             option.ValueChanged += OnThoughtLogPathChanged;

@@ -1,4 +1,4 @@
-﻿#define ENABLE_FEATURES_VALIDATION_CHECK
+﻿//#define ENABLE_FEATURES_VALIDATION_CHECK
 
 global using FeatureType = System.UInt16;
 
@@ -79,7 +79,7 @@ namespace KalmiaZero.NTuple
         public int NumNTuples => this.NTuples.Length;
         public NTuples NTuples { get; }
 
-        readonly Feature[] features;  // features[nTupleID]
+        public Feature[] Features { get; private set; }  // features[nTupleID]
         readonly FeatureDiff[] featureDiffTable = new FeatureDiff[NUM_SQUARES];
 
         delegate void Updator(ref Move move);
@@ -94,10 +94,10 @@ namespace KalmiaZero.NTuple
         public PositionFeatureVector(NTuples nTuples)
         {
             this.NTuples = nTuples;
-            this.features = new Feature[this.NTuples.Length];
+            this.Features = new Feature[this.NTuples.Length];
             var tuples = this.NTuples.Tuples;
-            for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
-                this.features[nTupleID] = new Feature(tuples[nTupleID].NumSymmetricExpansions);
+            for (var nTupleID = 0; nTupleID < this.Features.Length; nTupleID++)
+                this.Features[nTupleID] = new Feature(tuples[nTupleID].NumSymmetricExpansions);
 
             (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
             (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
@@ -109,9 +109,9 @@ namespace KalmiaZero.NTuple
         {
             this.SideToMove = pf.SideToMove;
             this.NTuples = pf.NTuples;
-            this.features = new Feature[pf.NumNTuples];
-            for(var i = 0; i < this.features.Length; i++)
-                this.features[i].CopyTo(ref pf.features[i]);
+            this.Features = new Feature[pf.NumNTuples];
+            for(var i = 0; i < this.Features.Length; i++)
+                this.Features[i].CopyTo(ref pf.Features[i]);
 
             if (this.SideToMove == DiscColor.Black)
             {
@@ -155,7 +155,7 @@ namespace KalmiaZero.NTuple
             }
         }
 
-        public ref Feature GetFeature(int nTupleID) => ref this.features[nTupleID];
+        public ref Feature GetFeature(int nTupleID) => ref this.Features[nTupleID];
 
         public void Init(Bitboard bitboard, DiscColor sideToMove, Span<Move> legalMoves)
         {
@@ -183,10 +183,10 @@ namespace KalmiaZero.NTuple
                 this.numPrevLegalMoves = legalMoves.Length;
             }
 
-            for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.Features.Length; nTupleID++)
             {
                 ReadOnlySpan<NTupleInfo> tuples = this.NTuples.Tuples;
-                ref Feature f = ref this.features[nTupleID];
+                ref Feature f = ref this.Features[nTupleID];
                 for (var i = 0; i < tuples[nTupleID].NumSymmetricExpansions; i++)
                 {
                     f[i] = 0;
@@ -214,8 +214,8 @@ namespace KalmiaZero.NTuple
                 (dest.playerRestorer, dest.opponentRestorer) = (dest.Undo<Black>, dest.Undo<White>);
             }
 
-            fixed (Feature* features = this.features)
-            fixed (Feature* destFeatures = dest.features)
+            fixed (Feature* features = this.Features)
+            fixed (Feature* destFeatures = dest.Features)
             {
                 for (var i = 0; i < this.NTuples.Length; i++)
                     features[i].CopyTo(ref destFeatures[i]);
@@ -288,7 +288,7 @@ namespace KalmiaZero.NTuple
             var placer = typeof(SideToMove) == typeof(Black) ? BLACK - UNREACHABLE_EMPTY : WHITE - UNREACHABLE_EMPTY;
             var flipper = typeof(SideToMove) == typeof(Black) ? BLACK - WHITE : WHITE - BLACK;
 
-            fixed(Feature* features = this.features)
+            fixed(Feature* features = this.Features)
             fixed (FeatureDiff* featureDiffTable = this.featureDiffTable)
             {
                 foreach (var (nTupleID, idx, diff) in featureDiffTable[(int)move.Coord].Values)
@@ -313,7 +313,7 @@ namespace KalmiaZero.NTuple
             var remover = typeof(SideToMove) == typeof(Black) ? UNREACHABLE_EMPTY - BLACK : UNREACHABLE_EMPTY - WHITE;
             var flipper = typeof(SideToMove) == typeof(Black) ? WHITE - BLACK : BLACK - WHITE;
 
-            fixed (Feature* features = this.features)
+            fixed (Feature* features = this.Features)
             fixed (FeatureDiff* featureDiffTable = this.featureDiffTable)
             {
                 foreach (var (nTupleID, idx, diff) in featureDiffTable[(int)move.Coord].Values)
@@ -335,7 +335,7 @@ namespace KalmiaZero.NTuple
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         unsafe void SetReachableEmpties(ref Span<Move> legalMoves)
         {
-            fixed (Feature* features = this.features)
+            fixed (Feature* features = this.Features)
             fixed (FeatureDiff* featureDiffTable = this.featureDiffTable)
             {
                 foreach (var move in legalMoves)
@@ -349,7 +349,7 @@ namespace KalmiaZero.NTuple
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         unsafe void RemoveReachableEmpties()
         {
-            fixed (Feature* features = this.features)
+            fixed (Feature* features = this.Features)
             fixed (FeatureDiff* featureDiffTable = this.featureDiffTable)
             fixed (Move* prevLegalMoves = this.prevLegalMoves)
             {

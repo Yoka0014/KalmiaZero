@@ -167,17 +167,20 @@ namespace KalmiaZero.Evaluation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public WeightType PredictLogit(PositionFeatureVector posFeature)
+        public unsafe WeightType PredictLogit(PositionFeatureVector posFeatureVec)
         {
-            Span<WeightType> weights = this.Weights.AsSpan(this.discColorOffset[(int)posFeature.SideToMove]);
-
             var x = WeightType.Zero;
-            for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+            fixed(int* discColorOffset = this.discColorOffset)
+            fixed (WeightType* weights = &this.Weights[discColorOffset[(int)posFeatureVec.SideToMove]])
+            fixed (Feature* features = posFeatureVec.Features)
             {
-                var w = weights[this.nTupleOffset[nTupleID]..];
-                ref Feature feature = ref posFeature.GetFeature(nTupleID);
-                for (var i = 0; i < feature.Length; i++)
-                    x += w[feature[i]];
+                for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+                {
+                    var w = weights + this.nTupleOffset[nTupleID];
+                    ref Feature feature = ref features[nTupleID];
+                    for (var i = 0; i < feature.Length; i++)
+                        x += w[feature[i]];
+                }
             }
 
             return x + this.Bias;

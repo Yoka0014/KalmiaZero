@@ -9,7 +9,6 @@ using KalmiaZero.Reversi;
 
 namespace KalmiaZero.Engines
 {
-
     public enum EngineState
     {
         NotReady,
