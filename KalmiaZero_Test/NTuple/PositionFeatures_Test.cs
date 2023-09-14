@@ -55,8 +55,8 @@ namespace KalmiaZero_Test.NTuple
 
                 for(var i = 0; i < expectedPf.NumNTuples; i++)
                 {
-                    var expectedF = expectedPf.GetFeatures(i);
-                    var actualF = actualPf.GetFeatures(i);
+                    ref Feature expectedF = ref expectedPf.GetFeature(i);
+                    ref Feature actualF = ref actualPf.GetFeature(i);
                     for (var j = 0; j < expectedF.Length; j++)
                     {
                         Assert.IsTrue(expectedF[j] >= 0 && expectedF[j] < nTuples.PowTable[NTUPLE_SIZE]);
@@ -130,8 +130,8 @@ namespace KalmiaZero_Test.NTuple
 
                 for (var i = 0; i < expectedPf.NumNTuples; i++)
                 {
-                    var expectedF = expectedPf.GetFeatures(i);
-                    var actualF = actualPf.GetFeatures(i);
+                    ref Feature expectedF = ref expectedPf.GetFeature(i);
+                    ref Feature actualF = ref actualPf.GetFeature(i);
                     for (var j = 0; j < expectedF.Length; j++)
                     {
                         Assert.IsTrue(expectedF[j] >= 0 && expectedF[j] < nTuples.PowTable[NTUPLE_SIZE]);

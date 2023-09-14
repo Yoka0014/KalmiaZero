@@ -14,7 +14,7 @@ using System.Runtime.CompilerServices;
 
 namespace KalmiaZero.Learn
 {
-    public struct ValueFuncOptimizerOptions<WeightType> where WeightType : struct, IFloatingPointIeee754<WeightType>
+    public struct ValueFuncOptimizerOptions<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         public int NumEpoch { get; set; }
         public WeightType LearningRate { get; set; } = WeightType.CreateChecked(0.01);
@@ -30,13 +30,13 @@ namespace KalmiaZero.Learn
         public ValueFuncOptimizerOptions() { }
     }
 
-    struct BatchItem<FloatType> where FloatType : struct, IFloatingPointIeee754<FloatType>
+    struct BatchItem<FloatType> where FloatType : unmanaged, IFloatingPointIeee754<FloatType>
     {
         public Bitboard Input;
         public FloatType Output;
     }
 
-    class ValueFuncOptimizer<WeightType> where WeightType : struct, IFloatingPointIeee754<WeightType>
+    class ValueFuncOptimizer<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         readonly string WORK_DIR_PATH;
         ValueFunction<WeightType> valueFunc;
@@ -215,11 +215,11 @@ namespace KalmiaZero.Learn
                     for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
                     {
                         var g = gradPerThread[nTupleID];
-                        ReadOnlySpan<FeatureType> features = featureVec.GetFeatures(nTupleID);
+                        ref Feature feature = ref featureVec.GetFeature(nTupleID);
                         ReadOnlySpan<FeatureType> mirror = nTuples.GetMirroredFeatureTable(nTupleID);
-                        for (var j = 0; j < features.Length; j++)
+                        for (var j = 0; j < feature.Length; j++)
                         {
-                            var f = features[j];
+                            var f = feature[j];
                             g[f] += delta;
                             g[mirror[f]] += delta;  // If f == mirror[f], twice grad is added to g[f], but this is not a problem because AdaGrad is adaptive algorithm.
                         }
@@ -249,20 +249,25 @@ namespace KalmiaZero.Learn
             });
         }
 
-        void ApplyGradients(WeightType[][] grads, WeightType biasGrad)
+        unsafe void ApplyGradients(WeightType[][] grads, WeightType biasGrad)
         {
             var eta = this.options.LearningRate;
-            for(var nTupleID = 0; nTupleID < grads.Length; nTupleID++)
+
+            fixed (WeightType* weight = this.valueFunc.Weights)
+            fixed(int* nTupleOffset = this.valueFunc.NTupleOffset)
             {
-                var w = this.valueFunc.GetWeights(DiscColor.Black, nTupleID);
-                var gradsPerNTuple = grads[nTupleID];
-                var g2 = this.gradsPow2Sums[nTupleID];
-                Parallel.For(0, gradsPerNTuple.Length, this.parallelOptions, feature =>
+                for (var nTupleID = 0; nTupleID < grads.Length; nTupleID++)
                 {
-                    var g = gradsPerNTuple[feature];
-                    g2[feature] += g * g;
-                    w[feature] -= eta * g / (WeightType.Sqrt(g2[feature]) + WeightType.Epsilon);
-                });
+                    var w = weight + nTupleOffset[nTupleID];
+                    var gradsPerNTuple = grads[nTupleID];
+                    var g2 = this.gradsPow2Sums[nTupleID];
+                    Parallel.For(0, gradsPerNTuple.Length, this.parallelOptions, feature =>
+                    {
+                        var g = gradsPerNTuple[feature];
+                        g2[feature] += g * g;
+                        w[feature] -= eta * g / (WeightType.Sqrt(g2[feature]) + WeightType.Epsilon);
+                    });
+                }
             }
 
             this.biasGradPow2Sum += biasGrad * biasGrad;

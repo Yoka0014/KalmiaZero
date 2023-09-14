@@ -9,10 +9,11 @@ using System.Runtime.InteropServices;
 using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
 using KalmiaZero.Utils;
+using System.Runtime.CompilerServices;
 
 namespace KalmiaZero.Evaluation
 {
-    public class ValueFunction<WeightType> where WeightType : struct, IFloatingPointIeee754<WeightType>
+    public partial class ValueFunction<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         const string LABEL = "KalmiaZero";
         const string LABEL_INVERSED = "oreZaimlaK";
@@ -21,20 +22,24 @@ namespace KalmiaZero.Evaluation
         public NTuples NTuples { get; }
         public WeightType Bias { get; set; }
 
-        readonly WeightType[][][] weights = new WeightType[2][][];     // weights[DiscColor][nTupleID][feature]
+        public WeightType[] Weights { get; private set; }
+        public ReadOnlySpan<int> DiscColorOffset => this.discColorOffset;
+        public ReadOnlySpan<int> NTupleOffset => this.nTupleOffset;
+
+        readonly int[] discColorOffset;
+        readonly int[] nTupleOffset;
 
         public ValueFunction(NTuples nTuples)
         {
             this.NTuples = nTuples;
-
-            for (var color = 0; color < 2; color++)
-            {
-                var w = weights[color] = new WeightType[this.NTuples.Length][];
-                for (var nTupleID = 0; nTupleID < w.Length; nTupleID++)
-                    w[nTupleID] = new WeightType[this.NTuples.NumPossibleFeatures[nTupleID]];
-            }
-
+            this.Weights = new WeightType[2 * nTuples.NumPossibleFeatures.Sum()];
+            this.discColorOffset = new int[2] { 0, this.Weights.Length / 2 };
             this.Bias = WeightType.Zero;
+
+            this.nTupleOffset = new int[nTuples.Length];
+            this.nTupleOffset[0] = 0;
+            for(var i = 1; i < nTupleOffset.Length; i++)
+                this.nTupleOffset[i] += this.nTupleOffset[i - 1] + nTuples.NumPossibleFeatures[i - 1];
         }
 
         /*
@@ -109,22 +114,22 @@ namespace KalmiaZero.Evaluation
                 valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
 
             // expand weights
-            valueFunc.weights[(int)DiscColor.Black] = valueFunc.ExpandPackedWeights(packedWeights);
+            valueFunc.Weights= valueFunc.ExpandPackedWeights(packedWeights);
             valueFunc.CopyWeightsBlackToWhite();
 
             return valueFunc;
         }
 
-        public WeightType[] GetWeights(DiscColor color, int nTupleID) => weights[(int)color][nTupleID];
+        public Span<WeightType> GetWeights(DiscColor color, int nTupleID)
+            => Weights.AsSpan(this.discColorOffset[(int)color] + this.nTupleOffset[nTupleID], this.NTuples.NumPossibleFeatures[nTupleID]);
 
         public void InitWeightsWithUniformRand(WeightType min, WeightType max) => InitWeightsWithUniformRand(Random.Shared, min, max);
 
         public void InitWeightsWithUniformRand(Random rand, WeightType min, WeightType max)
         {
-            WeightType[][] bWeights = weights[(int)DiscColor.Black];
             for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
             {
-                var bw = bWeights[nTupleID];
+                var w = this.Weights.AsSpan(nTupleOffset[nTupleID]);
                 ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
                 {
@@ -132,12 +137,12 @@ namespace KalmiaZero.Evaluation
                     if (feature <= mirrored)
                     {
                         if (typeof(WeightType) == typeof(Half) || typeof(WeightType) == typeof(float))
-                            bw[feature] = WeightType.CreateChecked(rand.NextSingle()) * (max - min) + min;
+                            w[feature] = WeightType.CreateChecked(rand.NextSingle()) * (max - min) + min;
                         else if (typeof(WeightType) == typeof(double))
-                            bw[feature] = WeightType.CreateChecked(rand.NextDouble()) * (max - min) + min;
+                            w[feature] = WeightType.CreateChecked(rand.NextDouble()) * (max - min) + min;
                     }
                     else
-                        bw[feature] = bw[mirrored];
+                        w[feature] = w[mirrored];
                 }
             }
             CopyWeightsBlackToWhite();
@@ -147,30 +152,32 @@ namespace KalmiaZero.Evaluation
 
         public void CopyWeightsBlackToWhite()
         {
-            WeightType[][] bWeights = weights[(int)DiscColor.Black];
-            WeightType[][] wWeights = weights[(int)DiscColor.White];
+            var whiteOffset = this.discColorOffset[(int)DiscColor.White];
+            Span<WeightType> bWeights = Weights.AsSpan(0, whiteOffset);
+            Span<WeightType> wWeights = Weights.AsSpan(whiteOffset);
 
-            for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
             {
-                var bw = bWeights[nTupleID];
-                var ww = wWeights[nTupleID];
+                var bw = bWeights[nTupleOffset[nTupleID]..];
+                var ww = wWeights[nTupleOffset[nTupleID]..];
                 ReadOnlySpan<FeatureType> toOpponent = this.NTuples.GetOpponentFeatureTable(nTupleID);
-                for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
+                for (var feature = 0; feature < toOpponent.Length; feature++)
                     ww[feature] = bw[toOpponent[feature]];
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public WeightType PredictLogit(PositionFeatureVector posFeature)
         {
-            WeightType[][] weights = this.weights[(int)posFeature.SideToMove];
+            Span<WeightType> weights = this.Weights.AsSpan(this.discColorOffset[(int)posFeature.SideToMove]);
 
             var x = WeightType.Zero;
-            for (var nTupleID = 0; nTupleID < weights.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
             {
-                var w = weights[nTupleID];
-                ReadOnlySpan<FeatureType> features = posFeature.GetFeatures(nTupleID);
-                for (var i = 0; i < features.Length; i++)
-                    x += w[features[i]];
+                var w = weights[this.nTupleOffset[nTupleID]..];
+                ref Feature feature = ref posFeature.GetFeature(nTupleID);
+                for (var i = 0; i < feature.Length; i++)
+                    x += w[feature[i]];
             }
 
             return x + this.Bias;
@@ -234,11 +241,11 @@ namespace KalmiaZero.Evaluation
 
         WeightType[][] PackWeights()
         {
-            WeightType[][] weights = this.weights[(int)DiscColor.Black];
-            var packedWeights = (from _ in Enumerable.Range(0, weights.Length) select new List<WeightType>()).ToArray();
-            for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
+            var packedWeights = (from _ in Enumerable.Range(0, Weights.Length) select new List<WeightType>()).ToArray();
+            var numPossibleFeatures = this.NTuples.NumPossibleFeatures;
+            for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
             {
-                var w = weights[nTupleID];
+                var w = this.Weights.AsSpan(this.nTupleOffset[nTupleID], numPossibleFeatures[nTupleID]);
                 var pw = packedWeights[nTupleID];
                 ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 for (var feature = 0; feature < w.Length; feature++)
@@ -248,12 +255,12 @@ namespace KalmiaZero.Evaluation
             return packedWeights.Select(n => n.ToArray()).ToArray();
         }
 
-        WeightType[][] ExpandPackedWeights(WeightType[][] packedWeights)
+        WeightType[] ExpandPackedWeights(WeightType[][] packedWeights)
         {
-            var weights = new WeightType[this.NTuples.Length][];
-            for (var nTupleID = 0; nTupleID < weights.Length; nTupleID++)
+            var weights = new WeightType[2 * this.NTuples.NumPossibleFeatures.Sum()];
+            for (var nTupleID = 0; nTupleID < nTupleOffset.Length; nTupleID++)
             {
-                var w = weights[nTupleID] = new WeightType[this.NTuples.NumPossibleFeatures[nTupleID]];
+                var w = weights.AsSpan(nTupleOffset[nTupleID], this.NTuples.NumPossibleFeatures[nTupleID]);
                 var pw = packedWeights[nTupleID];
                 ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
                 var i = 0;

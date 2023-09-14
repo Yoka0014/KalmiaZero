@@ -35,7 +35,9 @@ namespace KalmiaZero.Utils
             return -1;
         }
 
-        public static T Sum<T>(this Span<T> span) where T : INumber<T>
+        public static T Sum<T>(this Span<T> span) where T : INumber<T> => Sum((ReadOnlySpan<T>)span);
+
+        public static T Sum<T>(this ReadOnlySpan<T> span) where T : INumber<T>
         {
             var sum = T.Zero;
             foreach(var n in span)
@@ -43,6 +45,6 @@ namespace KalmiaZero.Utils
             return sum;
         }
 
-        public static T Sum<T>(this T[] array) where T: INumber<T> => array.AsSpan().Sum();
+        public static T Sum<T>(this T[] array) where T : INumber<T> => array.AsSpan().Sum();
     }
 }
