@@ -19,12 +19,12 @@ namespace KalmiaZero_Test.Evaluation
             const int NTUPLE_SIZE = 7;
 
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var valueFunc = new ValueFunctionForTrain<double>(new NTuples(nTuples));
+            var valueFunc = new ValueFunction<double>(new NTuples(nTuples));
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var fileName = Path.GetRandomFileName();
             valueFunc.SaveToFile(fileName);
-            var loaded = ValueFunctionForTrain<float>.LoadFromFile(fileName);
+            var loaded = ValueFunction<float>.LoadFromFile(fileName);
 
             for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
             {
@@ -51,7 +51,7 @@ namespace KalmiaZero_Test.Evaluation
 
             var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
             var nTuples = new NTuples(tuples);
-            var valueFunc = new ValueFunctionForTrain<float>(nTuples);
+            var valueFunc = new ValueFunction<float>(nTuples);
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var pos = new Position();

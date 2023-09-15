@@ -7,7 +7,7 @@ using KalmiaZero.Reversi;
 
 namespace KalmiaZero.Search.MCTS
 {
-    internal enum EdgeLabel : byte 
+    internal enum EdgeLabel : byte
     {
         NotProved = 0x00,
         Proved = 0xf0,
@@ -19,8 +19,8 @@ namespace KalmiaZero.Search.MCTS
     internal struct Edge
     {
         public Move Move;
-        public float PolicyProb;
-        public float Value;
+        public Half PolicyProb;
+        public Half Value;
         public uint VisitCount;
         public double RewardSum;
         public EdgeLabel Label;
@@ -43,7 +43,7 @@ namespace KalmiaZero.Search.MCTS
         }
     }
 
-    internal class Node 
+    internal class Node
     {
         public static uint ObjectCount => _ObjectCount;
         static uint _ObjectCount;
@@ -72,16 +72,16 @@ namespace KalmiaZero.Search.MCTS
         public Node() => Interlocked.Increment(ref _ObjectCount);
         ~Node() => Interlocked.Decrement(ref _ObjectCount);
 
-        public Node CreateChildNode(int idx) 
+        public Node CreateChildNode(int idx)
         {
             Debug.Assert(this.ChildNodes is not null);
-            return this.ChildNodes[idx] = new Node(); 
+            return this.ChildNodes[idx] = new Node();
         }
 
-        public Node[] InitChildNodes() 
+        public Node[] InitChildNodes()
         {
             Debug.Assert(this.Edges is not null);
-            return this.ChildNodes = new Node[this.Edges.Length]; 
+            return this.ChildNodes = new Node[this.Edges.Length];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

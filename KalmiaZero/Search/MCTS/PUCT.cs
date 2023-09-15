@@ -1,4 +1,6 @@
-﻿using System;
+﻿global using PUCTValueType = System.Single;
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -26,7 +28,7 @@ namespace KalmiaZero.Search.MCTS
         public const uint VIRTUAL_LOSS = 3;
     }
 
-    public class MoveEvaluation 
+    public class MoveEvaluation
     {
         public BoardCoordinate Move { get; init; }
         public double Effort { get; init; }
@@ -59,9 +61,9 @@ namespace KalmiaZero.Search.MCTS
             this.RootEval = rootEval;
             this.childEvals = childEvals.ToArray();
         }
-    } 
+    }
 
-    public enum SearchEndStatus : ushort 
+    public enum SearchEndStatus : ushort
     {
         Completed = 0x0001,
         Timeout = 0x0004,
@@ -122,7 +124,7 @@ namespace KalmiaZero.Search.MCTS
         public bool IsSearching => this.isSearching;
         volatile bool isSearching;
 
-        ValueFunction valueFunc;
+        ValueFunction<PUCTValueType> valueFunc;
 
         Node? root;
         Position rootState;
@@ -136,7 +138,7 @@ namespace KalmiaZero.Search.MCTS
 
         CancellationTokenSource? cts;
 
-        public PUCT(ValueFunction valueFunc) 
+        public PUCT(ValueFunction<PUCTValueType> valueFunc)
         {
             this.valueFunc = valueFunc;
             this.nodeCountPerThread = new uint[numThreads];
@@ -159,9 +161,9 @@ namespace KalmiaZero.Search.MCTS
             Debug.Assert(this.root.Edges is not null && this.root.ChildNodes is not null);
 
             Edge[] edges = this.root.Edges;
-            for(var i = 0; i < edges.Length; i++)
+            for (var i = 0; i < edges.Length; i++)
             {
-                if(move == edges[i].Move.Coord && this.root.ChildNodes[i] is not null)
+                if (move == edges[i].Move.Coord && this.root.ChildNodes[i] is not null)
                 {
                     this.rootState.Update(ref edges[i].Move);
                     this.root = this.root.ChildNodes[i];
@@ -239,15 +241,23 @@ namespace KalmiaZero.Search.MCTS
             var extraTimeMs = extraTimeCs * 10;
             this.searchStartTime = Environment.TickCount;
 
-            var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
-            for (var i = 0; i < searchTasks.Length; i++)
-            {
-                var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-                var threadID = i;
-                searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
-            }
+            //var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
+            //for(var i = 0; i < searchTasks.Length; i++)
+            //{
+            //    var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+            //    var threadID = i;
+            //    searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
+            //}
 
-            SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
+            //SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
+
+            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+            var g = new GameInfo(this.valueFunc.NTuples);
+            for (this.playoutCount = 0; this.playoutCount < this.maxPlayoutCount; this.playoutCount++)
+            {
+                game.CopyTo(ref g);
+                VisitRootNode(0, ref g);
+            }
 
             this.SearchInfoWasSent?.Invoke(this, CollectSearchInfo());
 
@@ -255,7 +265,8 @@ namespace KalmiaZero.Search.MCTS
             this.searchEndTime = Environment.TickCount;
             this.cts = null;
 
-            return status;
+            return SearchEndStatus.Completed;
+            //return status;
         }
 
         public void SendStopSearchSignal() => this.cts?.Cancel();
@@ -284,7 +295,7 @@ namespace KalmiaZero.Search.MCTS
 
             while (true)
             {
-                if(CanStopSearch(timeLimitMs, ref endStatus))
+                if (CanStopSearch(timeLimitMs, ref endStatus))
                 {
                     var suspended = ((endStatus & SearchEndStatus.SuspendedByStopSignal) != 0);
                     if (!suspended && !enteredExtraSearch && extraTimeMs != 0 && ExtraSearchIsNecessary())
@@ -325,31 +336,31 @@ namespace KalmiaZero.Search.MCTS
                 return true;
             }
 
-            if(this.rootEdgeLabel == EdgeLabel.Proved)
+            if (this.rootEdgeLabel == EdgeLabel.Proved)
             {
                 endStatus = SearchEndStatus.Proved;
                 return true;
             }
 
-            if(this.SearchEllapsedMs >= timeLimitMs)
+            if (this.SearchEllapsedMs >= timeLimitMs)
             {
                 endStatus = SearchEndStatus.Timeout;
                 return true;
             }
 
-            if(Node.ObjectCount >= this.NumNodesLimit)
+            if (Node.ObjectCount >= this.NumNodesLimit)
             {
                 endStatus = SearchEndStatus.OverNodes;
                 return true;
             }
 
-            if(this.playoutCount >= this.maxPlayoutCount)
+            if (this.playoutCount >= this.maxPlayoutCount)
             {
                 endStatus = SearchEndStatus.Completed;
                 return true;
             }
 
-            if(this.EnableEarlyStopping && CanDoEarlyStopping(timeLimitMs))
+            if (this.EnableEarlyStopping && CanDoEarlyStopping(timeLimitMs))
             {
                 endStatus = SearchEndStatus.EarlyStopping;
                 return true;
@@ -389,7 +400,7 @@ namespace KalmiaZero.Search.MCTS
 
             Edge[] edges = this.root.Edges;
             (var bestIdx, var secondBestIdx) = (edges[0].VisitCount > edges[1].VisitCount) ? (0, 1) : (1, 0);
-            for(var i = 2; i < edges.Length; i++)
+            for (var i = 2; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
                 if (edge.VisitCount > edges[bestIdx].VisitCount)
@@ -403,7 +414,7 @@ namespace KalmiaZero.Search.MCTS
 
         IEnumerable<BoardCoordinate> GetPV(Node? node, BoardCoordinate prevMove = BoardCoordinate.Null)
         {
-            if(prevMove != BoardCoordinate.Null)
+            if (prevMove != BoardCoordinate.Null)
                 yield return prevMove;
 
             if (node is null || node.Edges is null)
@@ -436,7 +447,7 @@ namespace KalmiaZero.Search.MCTS
 
             Debug.Assert(this.root.ChildNodes is not null);
 
-            for(var i = 0; i < this.root.ChildNodes.Length; i++)
+            for (var i = 0; i < this.root.ChildNodes.Length; i++)
             {
                 if (this.root.ChildNodes[i] is null)
                     this.root.CreateChildNode(i);
@@ -488,7 +499,7 @@ namespace KalmiaZero.Search.MCTS
 
                     edges = node.Expand(game.Moves);
 
-                    if(game.Moves.Length != 0)
+                    if (game.Moves.Length != 0)
                         SetPolicyProbsAndValues(ref game, edges);
                 }
                 else
@@ -501,7 +512,7 @@ namespace KalmiaZero.Search.MCTS
                     edges = node.Edges;
                 }
 
-                if(game.Moves.Length == 0)  // pass
+                if (game.Moves.Length == 0)  // pass
                 {
                     if (typeof(AfterPass) == typeof(True))  // gameover
                     {
@@ -624,7 +635,7 @@ namespace KalmiaZero.Search.MCTS
                 var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtSum / (1.0f + edge.VisitCount);
                 var score = q + u;
 
-                if(score > maxScore)
+                if (score > maxScore)
                 {
                     maxScore = score;
                     maxIdx = i;
@@ -652,7 +663,7 @@ namespace KalmiaZero.Search.MCTS
 
             var drawCount = 0;
             var lossCount = 0;
-            for(var i = 0; i < edges.Length; i++)
+            for (var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
 
@@ -690,7 +701,7 @@ namespace KalmiaZero.Search.MCTS
             if (ENABLE_EXACT_WIN_MCTS)
             {
                 if (lossCount + drawCount == edges.Length)
-                   edgeToParent.Label = (drawCount != 0) ? EdgeLabel.Draw : EdgeLabel.Loss;
+                    edgeToParent.Label = (drawCount != 0) ? EdgeLabel.Draw : EdgeLabel.Loss;
             }
 
             return maxIdx;
@@ -703,7 +714,7 @@ namespace KalmiaZero.Search.MCTS
             Edge[] edges = parent.Edges;
             var maxIdx = 0;
 
-            for(var i = 0; i < edges.Length; i++)
+            for (var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
 
@@ -724,11 +735,13 @@ namespace KalmiaZero.Search.MCTS
         [SkipLocalsInit]
         unsafe void SetPolicyProbsAndValues(ref GameInfo game, Edge[] edges)
         {
-            float uniformProb;
+            PUCTValueType uniformProb;
             if (USE_UNIFORM_POLICY)
-                uniformProb = 1.0f / edges.Length;
+                uniformProb = 1 / (PUCTValueType)edges.Length;
 
-            var expValueSum = 0.0f;
+            float value;
+            PUCTValueType expValueSum = 0;
+            var expValues = stackalloc PUCTValueType[edges.Length];
             for (var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
@@ -736,14 +749,17 @@ namespace KalmiaZero.Search.MCTS
                 game.Position.GenerateMove(ref move);
                 edge.Move = move;
                 game.Update(ref edge.Move);
-                edge.Value = 1.0f - this.valueFunc.Predict(game.FeatureVector);
-                expValueSum += !USE_UNIFORM_POLICY ? MathF.Exp(edge.Value) : uniformProb;
+                edge.Value = (Half)(value = 1 - this.valueFunc.Predict(game.FeatureVector));
+                expValueSum += expValues[i] = !USE_UNIFORM_POLICY ? FastMath.Exp(value) : uniformProb;
                 game.Undo(ref edge.Move, edges);
             }
 
-            // softmax
-            for (var i = 0; i < edges.Length; i++)
-                edges[i].PolicyProb /= expValueSum;
+            if (!USE_UNIFORM_POLICY)
+            {
+                // softmax
+                for (var i = 0; i < edges.Length; i++)
+                    edges[i].PolicyProb = (Half)(expValues[i] / expValueSum);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -756,7 +772,7 @@ namespace KalmiaZero.Search.MCTS
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static void UpdateNodeStats(Node parent, ref Edge childEdge, double reward)
         {
-            if(VIRTUAL_LOSS != 1)
+            if (VIRTUAL_LOSS != 1)
             {
                 Interlocked.Add(ref parent.VisitCount, unchecked(1 - VIRTUAL_LOSS));
                 Interlocked.Add(ref childEdge.VisitCount, unchecked(1 - VIRTUAL_LOSS));

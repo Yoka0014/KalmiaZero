@@ -85,7 +85,7 @@ namespace KalmiaZero.Engines
             this.Options["show_log"] = new EngineOption(false);
         }
 
-        public override void Quit() 
+        public override void Quit()
         {
             if (this.tree is not null && this.tree.IsSearching)
                 this.tree.SendStopSearchSignal();
@@ -115,7 +115,7 @@ namespace KalmiaZero.Engines
             timer.ByoyomiMs = byoyomiMs;
         }
 
-        public override void SetByoyomiStones(DiscColor color, int byoyomiStones) 
+        public override void SetByoyomiStones(DiscColor color, int byoyomiStones)
         {
             GameTimer timer = this.gameTimer[(int)color];
 
@@ -127,7 +127,7 @@ namespace KalmiaZero.Engines
 
         }
 
-        public override void SetTimeIncrement(DiscColor color, int incMs) 
+        public override void SetTimeIncrement(DiscColor color, int incMs)
         {
             GameTimer timer = this.gameTimer[(int)color];
 
@@ -171,7 +171,7 @@ namespace KalmiaZero.Engines
 
         protected override void OnInitializedPosition()
         {
-            if(this.tree is null)
+            if (this.tree is null)
             {
                 SendErrorMessage("Specifiy weights file path of value function.");
                 return;
@@ -256,7 +256,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunction.LoadFromFile(valueFuncWeightsPath));
+                this.tree = new PUCT(ValueFunction<PUCTValueType>.LoadFromFile(valueFuncWeightsPath));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }
@@ -307,21 +307,33 @@ namespace KalmiaZero.Engines
             this.tree.EnableEarlyStopping = this.Options["enable_early_stopping"].CurrentValue;
             uint numPlayouts = (uint)this.Options["num_playouts"].CurrentValue;
             (var mainTimeMs, var extraTimeMs) = AllocateTime(this.Position.SideToMove);
-            this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
+            //this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
 
-            void searchEndCallback(SearchEndStatus status)
-            {
-                WriteLog($"{status}.\n");
-                WriteLog($"End search.\n");
+            //void searchEndCallback(SearchEndStatus status)
+            //{
+            //    WriteLog($"{status}.\n");
+            //    WriteLog($"End search.\n");
 
-                var searchInfo = this.tree.CollectSearchInfo();
+            //    var searchInfo = this.tree.CollectSearchInfo();
 
-                if (searchInfo is null)
-                    return;
+            //    if (searchInfo is null)
+            //        return;
 
-                WriteLog(SearchInfoToString(searchInfo));
-                SendMove(SelectMove(searchInfo));
-            }
+            //    WriteLog(SearchInfoToString(searchInfo));
+            //    SendMove(SelectMove(searchInfo));
+            //}
+
+            this.tree.Search(numPlayouts, mainTimeMs / 10, extraTimeMs / 10);
+
+            WriteLog($"End search.\n");
+
+            var searchInfo = this.tree.CollectSearchInfo();
+
+            if (searchInfo is null)
+                return;
+
+            WriteLog(SearchInfoToString(searchInfo));
+            SendMove(SelectMove(searchInfo));
         }
 
         EngineMove SelectMove(SearchInfo searchInfo)
@@ -329,14 +341,14 @@ namespace KalmiaZero.Engines
             var childEvals = searchInfo.ChildEvals;
             var selectedIdx = 0;
             var moveNum = (Constants.NUM_SQUARES - 4) - this.Position.EmptySquareCount + 1;
-            if(moveNum <= this.Options["num_stochastic_moves"].CurrentValue)
+            if (moveNum <= this.Options["num_stochastic_moves"].CurrentValue)
             {
                 var tInv = 1.0 / (this.Options["softmax_temperature"].CurrentValue * 1.0e-3);
                 var indices = Enumerable.Range(0, childEvals.Length).ToArray();
                 var expPlayoutCount = new double[childEvals.Length];
                 var expPlayoutCountSum = 0.0;
 
-                for(var i = 0; i < indices.Length; i++)
+                for (var i = 0; i < indices.Length; i++)
                 {
                     indices[i] = i;
                     expPlayoutCountSum += expPlayoutCount[i] = Math.Pow(childEvals[i].PlayoutCount, tInv);
@@ -463,7 +475,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunction.LoadFromFile(path));
+                this.tree = new PUCT(ValueFunction<PUCTValueType>.LoadFromFile(path));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }
@@ -476,7 +488,7 @@ namespace KalmiaZero.Engines
 
         void OnNumThreadsChanged(object? sender, dynamic e)
         {
-            if(this.tree is null)
+            if (this.tree is null)
             {
                 SendErrorMessage("Specifiy weights file path of value function.");
                 return;
