@@ -12,7 +12,7 @@ namespace KalmiaZero.Search.MCTS
 {
     internal static class PUCTPerft
     {
-        public static void Start(ValueFunctionForTrain<PUCTValueType> valueFunc, int numThreads, uint numPlayouts, int numSamples)
+        public static void Start(ValueFunction valueFunc, int numThreads, uint numPlayouts, int numSamples)
         {
             var rootState = new Position();
             var tree = new PUCT(valueFunc);

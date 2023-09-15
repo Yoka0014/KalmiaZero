@@ -256,7 +256,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunctionForTrain<PUCTValueType>.LoadFromFile(valueFuncWeightsPath));
+                this.tree = new PUCT(ValueFunction.LoadFromFile(valueFuncWeightsPath));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }
@@ -463,7 +463,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunctionForTrain<PUCTValueType>.LoadFromFile(path));
+                this.tree = new PUCT(ValueFunction.LoadFromFile(path));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }

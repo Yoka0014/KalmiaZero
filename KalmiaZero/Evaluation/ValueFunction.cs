@@ -25,6 +25,8 @@ namespace KalmiaZero.Evaluation
     {
         const float WEIGHT_SCALE = 1000.0f;
 
+        public NTuples NTuples { get; }
+
         public short[] Weights { get; private set; }
         public short Bias { get; set; }
 
@@ -34,20 +36,25 @@ namespace KalmiaZero.Evaluation
         readonly int[] DISC_COLOR_OFFSET;
         readonly int[] N_TUPLE_OFFSET;
 
-        ValueFunction(short[] weights, short bias, int[] discColorOffset, int[] nTupleOffset)
+        ValueFunction(NTuples ntuples, short[] weights, short bias, int[] discColorOffset, int[] nTupleOffset)
         {
+            this.NTuples = ntuples;
             this.Weights = weights;
             this.Bias = bias;
             this.DISC_COLOR_OFFSET = discColorOffset;
             this.N_TUPLE_OFFSET = nTupleOffset;
         }
 
+        public static ValueFunction LoadFromFile(string filePath) => CreateFrom(ValueFunctionForTrain<float>.LoadFromFile(filePath));
+
         public static ValueFunction CreateFrom<WeightType>(ValueFunctionForTrain<WeightType> src) where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
         {
             var weights = new short[src.Weights.Length];
             for (var i = 0; i < weights.Length; i++)
                 weights[i] = short.CreateSaturating((float)(object)src.Weights[i] * WEIGHT_SCALE);
-            return new ValueFunction(weights, short.CreateSaturating((float)(object)src.Bias * WEIGHT_SCALE), src.DiscColorOffset.ToArray(), src.NTupleOffset.ToArray());
+            var bias = short.CreateSaturating((float)(object)src.Bias * WEIGHT_SCALE);
+
+            return new ValueFunction(src.NTuples, weights, bias, src.DiscColorOffset.ToArray(), src.NTupleOffset.ToArray());
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -70,6 +77,6 @@ namespace KalmiaZero.Evaluation
             return (x + this.Bias) / WEIGHT_SCALE;
         }
 
-        public float Predict(PositionFeatureVector posFeatureVec) => FastMath.Exp(PredictLogit(posFeatureVec)); 
+        public float Predict(PositionFeatureVector posFeatureVec) => MathF.Exp(PredictLogit(posFeatureVec)); 
     }
 }
