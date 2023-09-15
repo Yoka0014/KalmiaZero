@@ -12,7 +12,7 @@ namespace KalmiaZero.Engines
     internal class ValueGreedyEngine : Engine
     {
         PositionFeatureVector? posFeatureVec;
-        ValueFunction<double>? valueFunc;
+        ValueFunctionForTrain<double>? valueFunc;
 
         public ValueGreedyEngine() : base("ValueGreedyEngine", "0.0", "Yoka0014")
         {
@@ -111,7 +111,7 @@ namespace KalmiaZero.Engines
         {
             try
             {
-                this.valueFunc = ValueFunction<Half>.LoadFromFile(e.ToString());
+                this.valueFunc = ValueFunctionForTrain<Half>.LoadFromFile(e.ToString());
                 this.posFeatureVec = new PositionFeatureVector(this.valueFunc.NTuples);
                 UpdateFeature();
             }

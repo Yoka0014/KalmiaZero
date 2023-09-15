@@ -256,7 +256,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunction<PUCTValueType>.LoadFromFile(valueFuncWeightsPath));
+                this.tree = new PUCT(ValueFunction.LoadFromFile(valueFuncWeightsPath));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }
@@ -307,33 +307,21 @@ namespace KalmiaZero.Engines
             this.tree.EnableEarlyStopping = this.Options["enable_early_stopping"].CurrentValue;
             uint numPlayouts = (uint)this.Options["num_playouts"].CurrentValue;
             (var mainTimeMs, var extraTimeMs) = AllocateTime(this.Position.SideToMove);
-            //this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
+            this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
 
-            //void searchEndCallback(SearchEndStatus status)
-            //{
-            //    WriteLog($"{status}.\n");
-            //    WriteLog($"End search.\n");
+            void searchEndCallback(SearchEndStatus status)
+            {
+                WriteLog($"{status}.\n");
+                WriteLog($"End search.\n");
 
-            //    var searchInfo = this.tree.CollectSearchInfo();
+                var searchInfo = this.tree.CollectSearchInfo();
 
-            //    if (searchInfo is null)
-            //        return;
+                if (searchInfo is null)
+                    return;
 
-            //    WriteLog(SearchInfoToString(searchInfo));
-            //    SendMove(SelectMove(searchInfo));
-            //}
-
-            this.tree.Search(numPlayouts, mainTimeMs / 10, extraTimeMs / 10);
-
-            WriteLog($"End search.\n");
-
-            var searchInfo = this.tree.CollectSearchInfo();
-
-            if (searchInfo is null)
-                return;
-
-            WriteLog(SearchInfoToString(searchInfo));
-            SendMove(SelectMove(searchInfo));
+                WriteLog(SearchInfoToString(searchInfo));
+                SendMove(SelectMove(searchInfo));
+            }
         }
 
         EngineMove SelectMove(SearchInfo searchInfo)
@@ -475,7 +463,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunction<PUCTValueType>.LoadFromFile(path));
+                this.tree = new PUCT(ValueFunction.LoadFromFile(path));
                 var pos = this.Position;
                 this.tree.SetRootState(ref pos);
             }

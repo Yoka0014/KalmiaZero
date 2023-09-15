@@ -1,6 +1,4 @@
-﻿global using PUCTValueType = System.Single;
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -124,7 +122,7 @@ namespace KalmiaZero.Search.MCTS
         public bool IsSearching => this.isSearching;
         volatile bool isSearching;
 
-        ValueFunction<PUCTValueType> valueFunc;
+        ValueFunction valueFunc;
 
         Node? root;
         Position rootState;
@@ -138,7 +136,7 @@ namespace KalmiaZero.Search.MCTS
 
         CancellationTokenSource? cts;
 
-        public PUCT(ValueFunction<PUCTValueType> valueFunc) 
+        public PUCT(ValueFunction valueFunc) 
         {
             this.valueFunc = valueFunc;
             this.nodeCountPerThread = new uint[numThreads];
@@ -241,23 +239,15 @@ namespace KalmiaZero.Search.MCTS
             var extraTimeMs = extraTimeCs * 10;
             this.searchStartTime = Environment.TickCount;
 
-            //var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
-            //for(var i = 0; i < searchTasks.Length; i++)
-            //{
-            //    var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-            //    var threadID = i;
-            //    searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
-            //}
-
-            //SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
-
-            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-            var g = new GameInfo(this.valueFunc.NTuples);
-            for (this.playoutCount = 0; this.playoutCount < this.maxPlayoutCount; this.playoutCount++)
+            var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
+            for (var i = 0; i < searchTasks.Length; i++)
             {
-                game.CopyTo(ref g);
-                VisitRootNode(0, ref g);
+                var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+                var threadID = i;
+                searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
             }
+
+            SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
 
             this.SearchInfoWasSent?.Invoke(this, CollectSearchInfo());
 
@@ -265,8 +255,7 @@ namespace KalmiaZero.Search.MCTS
             this.searchEndTime = Environment.TickCount;
             this.cts = null;
 
-            return SearchEndStatus.Completed;
-            //return status;
+            return status;
         }
 
         public void SendStopSearchSignal() => this.cts?.Cancel();
@@ -732,32 +721,29 @@ namespace KalmiaZero.Search.MCTS
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void SetPolicyProbsAndValues(ref GameInfo game, Edge[] edges)
+        [SkipLocalsInit]
+        unsafe void SetPolicyProbsAndValues(ref GameInfo game, Edge[] edges)
         {
-            PUCTValueType uniformProb;
+            float uniformProb;
             if (USE_UNIFORM_POLICY)
-                uniformProb = 1 / (PUCTValueType)edges.Length;
+                uniformProb = 1.0f / edges.Length;
 
-            PUCTValueType expValueSum = 0;
-            for(var i = 0; i < edges.Length; i++)
+            var expValueSum = 0.0f;
+            for (var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
                 ref Move move = ref game.Moves[i];
                 game.Position.GenerateMove(ref move);
                 edge.Move = move;
                 game.Update(ref edge.Move);
-                edge.Value = 1 - this.valueFunc.Predict(game.FeatureVector);
-                edge.PolicyProb = !USE_UNIFORM_POLICY ? PUCTValueType.Exp(edge.Value) : uniformProb;
-                expValueSum += edge.PolicyProb;
+                edge.Value = 1.0f - this.valueFunc.Predict(game.FeatureVector);
+                expValueSum += !USE_UNIFORM_POLICY ? MathF.Exp(edge.Value) : uniformProb;
                 game.Undo(ref edge.Move, edges);
             }
 
-            if (!USE_UNIFORM_POLICY)
-            {
-                // softmax
-                for (var i = 0; i < edges.Length; i++)
-                    edges[i].PolicyProb /= expValueSum;
-            }
+            // softmax
+            for (var i = 0; i < edges.Length; i++)
+                edges[i].PolicyProb /= expValueSum;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
