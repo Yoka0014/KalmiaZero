@@ -241,23 +241,15 @@ namespace KalmiaZero.Search.MCTS
             var extraTimeMs = extraTimeCs * 10;
             this.searchStartTime = Environment.TickCount;
 
-            //var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
-            //for(var i = 0; i < searchTasks.Length; i++)
-            //{
-            //    var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-            //    var threadID = i;
-            //    searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
-            //}
-
-            //SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
-
-            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-            var g = new GameInfo(this.valueFunc.NTuples);
-            for (this.playoutCount = 0; this.playoutCount < this.maxPlayoutCount; this.playoutCount++)
+            var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
+            for (var i = 0; i < searchTasks.Length; i++)
             {
-                game.CopyTo(ref g);
-                VisitRootNode(0, ref g);
+                var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+                var threadID = i;
+                searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
             }
+
+            SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
 
             this.SearchInfoWasSent?.Invoke(this, CollectSearchInfo());
 
@@ -265,8 +257,7 @@ namespace KalmiaZero.Search.MCTS
             this.searchEndTime = Environment.TickCount;
             this.cts = null;
 
-            return SearchEndStatus.Completed;
-            //return status;
+            return status;
         }
 
         public void SendStopSearchSignal() => this.cts?.Cancel();
