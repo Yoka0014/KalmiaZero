@@ -95,7 +95,7 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void PutPlayerDiscAt(BoardCoordinate coord)
         {
-            ulong bit = Utils.COORD_TO_BIT[(int)coord];
+            var bit = 1UL << (int)coord;
             this.Player |= bit;
             if ((this.Opponent & bit) != 0)
                 this.Opponent ^= bit;
@@ -104,7 +104,7 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void PutOpponentDiscAt(BoardCoordinate coord)
         {
-            ulong bit = Utils.COORD_TO_BIT[(int)coord];
+            ulong bit = 1UL << (int)coord;
             this.Opponent |= bit;
             if ((this.Player & bit) != 0)
                 this.Player ^= bit;
@@ -113,7 +113,7 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RemoveDiscAt(BoardCoordinate coord)
         {
-            ulong bit = Utils.COORD_TO_BIT[(int)coord];
+            ulong bit = 1UL << (int)coord;
             this.Player &= ~bit;
             this.Opponent &= ~bit;
         }
@@ -123,14 +123,14 @@ namespace KalmiaZero.Reversi
         {
             ulong player = this.Player;
             this.Player = this.Opponent ^ flip;
-            this.Opponent = player | (Utils.COORD_TO_BIT[(int)coord] | flip);
+            this.Opponent = player | (1UL << (int)coord | flip);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Undo(BoardCoordinate coord, ulong flip)
         {
             ulong player = this.Player ^ flip;
-            this.Player = this.Opponent ^ (Utils.COORD_TO_BIT[(int)coord] | flip);
+            this.Player = this.Opponent ^ (1UL << (int)coord | flip);
             this.Opponent = player | flip;
         }
 
@@ -395,7 +395,7 @@ namespace KalmiaZero.Reversi
             var shift2 = Vector256.Create(2UL, 16UL, 18UL, 14UL);
             var flipMask = Vector256.Create(0x7e7e7e7e7e7e7e7eUL, 0xffffffffffffffffUL, 0x7e7e7e7e7e7e7e7eUL, 0x7e7e7e7e7e7e7e7eUL);
 
-            ulong x = Utils.COORD_TO_BIT[(int)coord];
+            ulong x = 1UL << (int)coord;
             var x4 = Avx2.BroadcastScalarToVector256(Sse2.X64.ConvertScalarToVector128UInt64(x));
             var p4 = Avx2.BroadcastScalarToVector256(Sse2.X64.ConvertScalarToVector128UInt64(p));
             var maskedO4 = Avx2.And(Avx2.BroadcastScalarToVector256(Sse2.X64.ConvertScalarToVector128UInt64(o)), flipMask);
@@ -424,7 +424,7 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static ulong ComputeFlippingDiscs_SSE(ulong p, ulong o, BoardCoordinate coord)
         {
-            ulong x = Utils.COORD_TO_BIT[(int)coord];
+            ulong x = 1UL << (int)coord;
             var maskedO = o & 0x7e7e7e7e7e7e7e7eUL;
             var x2 = Vector128.Create(x, ByteSwap(x));   // byte swap = vertical mirror
             var p2 = Vector128.Create(p, ByteSwap(p));
@@ -503,7 +503,7 @@ namespace KalmiaZero.Reversi
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static ulong ComputeFlippingDiscs_General(ulong p, ulong o, BoardCoordinate coord)
         {
-            ulong x = Utils.COORD_TO_BIT[(int)coord];
+            ulong x = 1UL << (int)coord;
             var masked_o = o & 0x7e7e7e7e7e7e7e7eUL;
 
             // left

@@ -1,8 +1,9 @@
-﻿using System;
+﻿global using PUCTValueType = System.Single;
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,7 +21,7 @@ namespace KalmiaZero.Search.MCTS
         // cite: https://doi.org/10.1145/3293475.3293486
         public const bool ENABLE_EXACT_WIN_MCTS = false;
 
-        public const bool ENABLE_SINGLE_THREAD_MODE = false;
+        public const bool ENABLE_SINGLE_THREAD_MODE = true;
 
         public const bool USE_UNIFORM_POLICY = false;
         public const float PUCT_FACTOR = 1.0f;
@@ -53,7 +54,7 @@ namespace KalmiaZero.Search.MCTS
     {
         public MoveEvaluation RootEval { get; }
         public ReadOnlySpan<MoveEvaluation> ChildEvals => this.childEvals;
-        MoveEvaluation[] childEvals;
+        readonly MoveEvaluation[] childEvals;
 
         public SearchInfo(MoveEvaluation rootEval, IEnumerable<MoveEvaluation> childEvals)
         {
@@ -123,7 +124,7 @@ namespace KalmiaZero.Search.MCTS
         public bool IsSearching => this.isSearching;
         volatile bool isSearching;
 
-        ValueFunction<Half> valueFunc;
+        ValueFunction<PUCTValueType> valueFunc;
 
         Node? root;
         Position rootState;
@@ -137,7 +138,7 @@ namespace KalmiaZero.Search.MCTS
 
         CancellationTokenSource? cts;
 
-        public PUCT(ValueFunction<Half> valueFunc) 
+        public PUCT(ValueFunction<PUCTValueType> valueFunc) 
         {
             this.valueFunc = valueFunc;
             this.nodeCountPerThread = new uint[numThreads];
@@ -240,23 +241,32 @@ namespace KalmiaZero.Search.MCTS
             var extraTimeMs = extraTimeCs * 10;
             this.searchStartTime = Environment.TickCount;
 
-            var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
-            for(var i = 0; i < searchTasks.Length; i++)
-            {
-                var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
-                var threadID = i;
-                searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
-            }
+            //var searchTasks = new Task[ENABLE_SINGLE_THREAD_MODE ? 1 : this.numThreads];
+            //for(var i = 0; i < searchTasks.Length; i++)
+            //{
+            //    var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+            //    var threadID = i;
+            //    searchTasks[i] = Task.Run(() => SearchWorker(threadID, ref game, this.cts.Token));
+            //}
 
-            SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
+            //SearchEndStatus status = WaitForSearch(searchTasks, timeLimitMs, extraTimeMs);
+
+            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+            var g = new GameInfo(this.valueFunc.NTuples);
+            for (this.playoutCount = 0; this.playoutCount < this.maxPlayoutCount; this.playoutCount++)
+            {
+                game.CopyTo(ref g);
+                VisitRootNode(0, ref g);
+            }
 
             this.SearchInfoWasSent?.Invoke(this, CollectSearchInfo());
 
             this.isSearching = false;
             this.searchEndTime = Environment.TickCount;
-            this.cts = null; 
+            this.cts = null;
 
-            return status;
+            return SearchEndStatus.Completed;
+            //return status;
         }
 
         public void SendStopSearchSignal() => this.cts?.Cancel();
@@ -724,11 +734,11 @@ namespace KalmiaZero.Search.MCTS
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void SetPolicyProbsAndValues(ref GameInfo game, Edge[] edges)
         {
-            Half uniformProb;
+            PUCTValueType uniformProb;
             if (USE_UNIFORM_POLICY)
-                uniformProb = Half.One / (Half)edges.Length;
+                uniformProb = 1 / (PUCTValueType)edges.Length;
 
-            var expValueSum = Half.Zero;
+            PUCTValueType expValueSum = 0;
             for(var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
@@ -736,8 +746,8 @@ namespace KalmiaZero.Search.MCTS
                 game.Position.GenerateMove(ref move);
                 edge.Move = move;
                 game.Update(ref edge.Move);
-                edge.Value = Half.One - this.valueFunc.Predict(game.FeatureVector);
-                edge.PolicyProb = !USE_UNIFORM_POLICY ? Half.Exp(edge.Value) : uniformProb;
+                edge.Value = 1 - this.valueFunc.Predict(game.FeatureVector);
+                edge.PolicyProb = !USE_UNIFORM_POLICY ? PUCTValueType.Exp(edge.Value) : uniformProb;
                 expValueSum += edge.PolicyProb;
                 game.Undo(ref edge.Move, edges);
             }

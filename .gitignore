@@ -365,4 +365,5 @@ FodyWeavers.xsd
 
 TrainData/
 TrainWorkDir/
+DebugWorkDir/
 Weights/

@@ -37,8 +37,8 @@ namespace KalmiaZero.Reversi
 
         public Position()
         {
-            this.bitboard = new Bitboard(Utils.COORD_TO_BIT[(int)BoardCoordinate.E4] | Utils.COORD_TO_BIT[(int)BoardCoordinate.D5],
-                                         Utils.COORD_TO_BIT[(int)BoardCoordinate.D4] | Utils.COORD_TO_BIT[(int)BoardCoordinate.E5]);
+            this.bitboard = new Bitboard(1UL << (int)BoardCoordinate.E4 | 1UL << (int)BoardCoordinate.D5,
+                                         1UL << (int)BoardCoordinate.D4 | 1UL << (int)BoardCoordinate.E5);
             this.sideToMove = DiscColor.Black;
             this.OpponentColor = DiscColor.White;
         }
@@ -91,7 +91,7 @@ namespace KalmiaZero.Reversi
         }
 
         public readonly bool IsLegalMoveAt(BoardCoordinate coord)
-            => coord == BoardCoordinate.Pass ? this.CanPass : (this.bitboard.ComputePlayerMobility() & Utils.COORD_TO_BIT[(int)coord]) != 0UL;
+            => coord == BoardCoordinate.Pass ? this.CanPass : (this.bitboard.ComputePlayerMobility() & (1UL << (int)coord)) != 0UL;
 
         public readonly int GetScore(DiscColor color) => (color == this.sideToMove) ? this.DiscDiff : -this.DiscDiff;
 
