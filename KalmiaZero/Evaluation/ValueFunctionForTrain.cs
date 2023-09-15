@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 
 namespace KalmiaZero.Evaluation
 {
-    public partial class ValueFunction<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
+    public partial class ValueFunctionForTrain<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         const string LABEL = "KalmiaZero";
         const string LABEL_INVERSED = "oreZaimlaK";
@@ -29,7 +29,7 @@ namespace KalmiaZero.Evaluation
         readonly int[] discColorOffset;
         readonly int[] nTupleOffset;
 
-        public ValueFunction(NTuples nTuples)
+        public ValueFunctionForTrain(NTuples nTuples)
         {
             this.NTuples = nTuples;
             this.Weights = new WeightType[2 * nTuples.NumPossibleFeatures.Sum()];
@@ -52,7 +52,7 @@ namespace KalmiaZero.Evaluation
          * offset = M + 4: weights
          * offset = -1: bias
          */
-        public static ValueFunction<WeightType> LoadFromFile(string filePath)
+        public static ValueFunctionForTrain<WeightType> LoadFromFile(string filePath)
         {
             const int BUFFER_SIZE = 16;
 
@@ -79,7 +79,7 @@ namespace KalmiaZero.Evaluation
                 nTuples[i] = new NTupleInfo(coords);
             }
 
-            var valueFunc = new ValueFunction<WeightType>(new NTuples(nTuples));
+            var valueFunc = new ValueFunctionForTrain<WeightType>(new NTuples(nTuples));
 
             // load weights
             fs.Read(buffer[..sizeof(int)], swapBytes);

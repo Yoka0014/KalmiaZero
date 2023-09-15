@@ -124,7 +124,7 @@ namespace KalmiaZero.Search.MCTS
         public bool IsSearching => this.isSearching;
         volatile bool isSearching;
 
-        ValueFunction<PUCTValueType> valueFunc;
+        ValueFunctionForTrain<PUCTValueType> valueFunc;
 
         Node? root;
         Position rootState;
@@ -138,7 +138,7 @@ namespace KalmiaZero.Search.MCTS
 
         CancellationTokenSource? cts;
 
-        public PUCT(ValueFunction<PUCTValueType> valueFunc) 
+        public PUCT(ValueFunctionForTrain<PUCTValueType> valueFunc) 
         {
             this.valueFunc = valueFunc;
             this.nodeCountPerThread = new uint[numThreads];
