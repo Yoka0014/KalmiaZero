@@ -19,8 +19,8 @@ namespace KalmiaZero.Search.MCTS
     internal struct Edge
     {
         public Move Move;
-        public PUCTValueType PolicyProb;
-        public PUCTValueType Value;
+        public float PolicyProb;
+        public float Value;
         public uint VisitCount;
         public double RewardSum;
         public EdgeLabel Label;

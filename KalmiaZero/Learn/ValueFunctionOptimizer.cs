@@ -39,14 +39,14 @@ namespace KalmiaZero.Learn
     class ValueFuncOptimizer<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         readonly string WORK_DIR_PATH;
-        ValueFunction<WeightType> valueFunc;
+        ValueFunctionForTrain<WeightType> valueFunc;
         WeightType[][] gradsPow2Sums;
         WeightType biasGradPow2Sum;
         ValueFuncOptimizerOptions<WeightType> options;
         ParallelOptions parallelOptions;
         List<(WeightType trainLoss, WeightType testLoss)> lossHistroy = new();
 
-        public ValueFuncOptimizer(string workDirPath, ValueFunction<WeightType> valueFunc, ValueFuncOptimizerOptions<WeightType> options)
+        public ValueFuncOptimizer(string workDirPath, ValueFunctionForTrain<WeightType> valueFunc, ValueFuncOptimizerOptions<WeightType> options)
         {
             this.WORK_DIR_PATH = workDirPath;
             this.options = options;
