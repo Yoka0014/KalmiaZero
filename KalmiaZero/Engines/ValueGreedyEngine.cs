@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 
 using KalmiaZero.Evaluation;
@@ -16,7 +17,7 @@ namespace KalmiaZero.Engines
 
         public ValueGreedyEngine() : base("ValueGreedyEngine", "0.0", "Yoka0014")
         {
-            this.Options.Add("weights_file_path", new EngineOption(string.Empty, EngineOptionType.FileName));
+            this.Options.Add("value_func_weights_path", new EngineOption("params/value_func_weights.bin", EngineOptionType.FileName));
             this.Options.Last().Value.ValueChanged += ValueFuncWeightsPathSpecified;
         }
 
@@ -64,7 +65,7 @@ namespace KalmiaZero.Engines
             var multiPV = new MultiPV();
             for(var i = 0; i < numNextMoves; i++)
             {
-                multiPV.Add(new MultiPVItem(new BoardCoordinate[1] { legalMoves[i].Coord })
+                multiPV.Add(new MultiPVItem(new BoardCoordinate[1] { nextMoves[i].Coord })
                 {
                     Depth = 0,
                     EvalScore = (double)values[i] * 100.0,
@@ -95,7 +96,31 @@ namespace KalmiaZero.Engines
 
         public override bool StopThinking(int timeoutMs) => true;
 
-        protected override bool OnReady() => true;
+        protected override bool OnReady()
+        {
+            string valueFuncWeightsPath = this.Options["value_func_weights_path"].CurrentValue;
+            if (!File.Exists(valueFuncWeightsPath))
+            {
+                SendErrorMessage($"Cannot find value func weights file: \"{valueFuncWeightsPath}\".");
+                return false;
+            }
+
+            try
+            {
+                this.valueFunc = ValueFunction<double>.LoadFromFile(valueFuncWeightsPath);
+            }
+            catch (InvalidDataException ex)
+            {
+                SendErrorMessage(ex.Message);
+                return false;
+            }
+
+            this.posFeatureVec = new PositionFeatureVector(this.valueFunc.NTuples);
+            UpdateFeature();
+
+            return true;
+        }
+
         protected override void OnStartGame() { }
         protected override void OnEndGame() { }
 

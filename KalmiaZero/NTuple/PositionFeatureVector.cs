@@ -111,7 +111,7 @@ namespace KalmiaZero.NTuple
             this.NTuples = pf.NTuples;
             this.Features = new Feature[pf.NumNTuples];
             for(var i = 0; i < this.Features.Length; i++)
-                this.Features[i].CopyTo(ref pf.Features[i]);
+                pf.Features[i].CopyTo(ref this.Features[i]);
 
             if (this.SideToMove == DiscColor.Black)
             {

@@ -16,7 +16,7 @@ namespace KalmiaZero
         static void Main(string[] args)
         {
             //PUCTPerft.Start(ValueFunction<PUCTValueType>.LoadFromFile("params/value_func_weights.bin"), 1, 10000, 10);
-            var engine = new PUCTEngine();
+            var engine = new ValueGreedyEngine();
             var nboard = new NBoard();
             nboard.Mainloop(engine);
         }
