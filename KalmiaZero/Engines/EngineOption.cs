@@ -33,11 +33,11 @@ namespace KalmiaZero.Engines
             private set
             {
                 if (this.MinValue is not null)
-                    if (((IComparable)this.currentValue).CompareTo(this.MinValue) < 0)
+                    if (((IComparable)value).CompareTo(this.MinValue) < 0)
                         return;
 
                 if (this.MaxValue is not null)
-                    if (((IComparable)this.currentValue).CompareTo(this.MaxValue) > 0)
+                    if (((IComparable)value).CompareTo(this.MaxValue) > 0)
                         return;
 
                 if (this.Type == EngineOptionType.Combo && !this.comboItems.Contains(value))

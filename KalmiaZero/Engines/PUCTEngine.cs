@@ -76,6 +76,7 @@ namespace KalmiaZero.Engines
             this.Options["enable_extra_search"] = new EngineOption(false);
             this.Options["enable_early_stopping"] = new EngineOption(false);
             this.Options["enable_pondering"] = new EngineOption(false);
+            this.Options["fixed_time_cs"] = new EngineOption(0, 10, int.MaxValue / 10);
             this.Options["show_search_info_interval_cs"] = new EngineOption(50, 1, 6000);
 
             option = new EngineOption(string.Empty, EngineOptionType.FileName);
@@ -367,7 +368,10 @@ namespace KalmiaZero.Engines
         (int mainTimeMs, int extraTimeMs) AllocateTime(DiscColor color)
         {
             // TODO: 時間管理は探索のデバッグが済んでから実装.
-            return (int.MaxValue, this.Options["enable_extra_search"].CurrentValue ? int.MaxValue : 0);
+            if (this.Options["fixed_time_cs"].CurrentValue == 0)
+                return (int.MaxValue, this.Options["enable_extra_search"].CurrentValue ? int.MaxValue : 0);
+            else
+                return ((int)(this.Options["fixed_time_cs"].CurrentValue * 10), 0);
         }
 
         void SendSearchInfo(SearchInfo? searchInfo)
