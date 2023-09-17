@@ -64,7 +64,7 @@ namespace KalmiaZero.Engines
             option.ValueChanged += OnNumNodesLimitChanged;
             this.Options["num_nodes_limit"] = option;
 
-            this.Options["num_playouts"] = new EngineOption(3200000, 10, uint.MaxValue);
+            this.Options["num_playouts"] = new EngineOption(10000, 10, uint.MaxValue);
             this.Options["num_stochastic_moves"] = new EngineOption(0, 0, Constants.NUM_SQUARES - 4);
             this.Options["softmax_temperature"] = new EngineOption(1000, 0, long.MaxValue);
 
@@ -78,7 +78,7 @@ namespace KalmiaZero.Engines
             this.Options["enable_pondering"] = new EngineOption(false);
             this.Options["show_search_info_interval_cs"] = new EngineOption(50, 1, 6000);
 
-            option = new EngineOption(Path.Combine(LOG_DIR, "puct.log"), EngineOptionType.FileName);
+            option = new EngineOption(string.Empty, EngineOptionType.FileName);
             option.ValueChanged += OnThoughtLogPathChanged;
             this.Options["thought_log_path"] = option;
 
@@ -256,9 +256,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunction<PUCTValueType>.LoadFromFile(valueFuncWeightsPath));
-                var pos = this.Position;
-                this.tree.SetRootState(ref pos);
+                InitTree(ValueFunction<PUCTValueType>.LoadFromFile(valueFuncWeightsPath));
             }
             catch (InvalidDataException ex)
             {
@@ -272,6 +270,14 @@ namespace KalmiaZero.Engines
         protected override void OnStartGame() { }
 
         protected override void OnEndGame() { }
+
+        void InitTree(ValueFunction<PUCTValueType> valueFunc)
+        {
+            this.tree = new PUCT(valueFunc);
+            var pos = this.Position;
+            this.tree.SetRootState(ref pos);
+            this.tree.SearchInfoWasSent += (s, e) => SendSearchInfo(e);
+        }
 
         void StopIfPondering()
         {
@@ -302,38 +308,25 @@ namespace KalmiaZero.Engines
 
             WriteLog("Start search.\n");
 
-            this.tree.SearchInfoWasSent += (s, e) => SendSearchInfo(e);
             this.tree.SearchInfoSendIntervalCs = (int)this.Options["show_search_info_interval_cs"].CurrentValue;
             this.tree.EnableEarlyStopping = this.Options["enable_early_stopping"].CurrentValue;
             uint numPlayouts = (uint)this.Options["num_playouts"].CurrentValue;
             (var mainTimeMs, var extraTimeMs) = AllocateTime(this.Position.SideToMove);
-            //this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
+            this.searchTask = this.tree.SearchAsync(numPlayouts, mainTimeMs / 10, extraTimeMs / 10, searchEndCallback);
 
-            //void searchEndCallback(SearchEndStatus status)
-            //{
-            //    WriteLog($"{status}.\n");
-            //    WriteLog($"End search.\n");
+            void searchEndCallback(SearchEndStatus status)
+            {
+                WriteLog($"{status}.\n");
+                WriteLog($"End search.\n");
 
-            //    var searchInfo = this.tree.CollectSearchInfo();
+                var searchInfo = this.tree.CollectSearchInfo();
 
-            //    if (searchInfo is null)
-            //        return;
+                if (searchInfo is null)
+                    return;
 
-            //    WriteLog(SearchInfoToString(searchInfo));
-            //    SendMove(SelectMove(searchInfo));
-            //}
-
-            this.tree.Search(numPlayouts, mainTimeMs / 10, extraTimeMs / 10);
-
-            WriteLog($"End search.\n");
-
-            var searchInfo = this.tree.CollectSearchInfo();
-
-            if (searchInfo is null)
-                return;
-
-            WriteLog(SearchInfoToString(searchInfo));
-            SendMove(SelectMove(searchInfo));
+                WriteLog(SearchInfoToString(searchInfo));
+                SendMove(SelectMove(searchInfo));
+            }
         }
 
         EngineMove SelectMove(SearchInfo searchInfo)
@@ -475,9 +468,7 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.tree = new PUCT(ValueFunction<PUCTValueType>.LoadFromFile(path));
-                var pos = this.Position;
-                this.tree.SetRootState(ref pos);
+                InitTree(ValueFunction<PUCTValueType>.LoadFromFile(path));
             }
             catch (InvalidDataException ex)
             {

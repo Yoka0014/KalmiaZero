@@ -23,7 +23,7 @@ namespace KalmiaZero.Search.MCTS
             {
                 tree.SetRootState(ref rootState);
                 tree.EnableEarlyStopping = false;
-                tree.Search(numPlayouts, int.MaxValue, 0);
+                tree.Search(numPlayouts, int.MaxValue / 10, 0);
                 npsSum += tree.Nps;
                 ellpasedSum += tree.SearchEllapsedMs;
             }
