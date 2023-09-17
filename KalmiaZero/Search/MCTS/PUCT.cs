@@ -314,8 +314,7 @@ namespace KalmiaZero.Search.MCTS
             if (enteredExtraSearch)
                 endStatus |= SearchEndStatus.Extended;
 
-            foreach (var task in searchTasks)
-                task.Wait();
+            Task.WaitAll(searchTasks);
 
             return endStatus;
         }
