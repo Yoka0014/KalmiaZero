@@ -210,7 +210,7 @@ namespace KalmiaZero.Learn
                     featureVec.Init(ref pos, moves[..numMoves]);
                     var y = this.valueFunc.Predict(featureVec);
                     var delta = y - batch[i].Output;
-                    loss += BinaryCrossEntropy(y, batch[i].Output);
+                    loss += LossFunctions.BinaryCrossEntropy(y, batch[i].Output);
 
                     for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
                     {
@@ -298,14 +298,10 @@ namespace KalmiaZero.Learn
                     var pos = new Position(item.Input, DiscColor.Black);
                     var numMoves = pos.GetNextMoves(ref moves);
                     featureVec.Init(ref pos, moves[..numMoves]);
-                    loss += BinaryCrossEntropy(this.valueFunc.Predict(featureVec), item.Output);
+                    loss += LossFunctions.BinaryCrossEntropy(this.valueFunc.Predict(featureVec), item.Output);
                 }
                 return loss;
             }
         }
-
-        static WeightType BinaryCrossEntropy(WeightType y, WeightType t)
-            => -(t * WeightType.Log(y + WeightType.Epsilon)
-            + (WeightType.One - t) * WeightType.Log(WeightType.One - y + WeightType.Epsilon));
     }
 }

@@ -150,6 +150,28 @@ namespace KalmiaZero.Evaluation
             this.Bias = WeightType.Zero;
         }
 
+        public void InitWeightsWithNormalRand(WeightType mu, WeightType sigma) => InitWeightsWithNormalRand(Random.Shared, mu, sigma);
+
+        public void InitWeightsWithNormalRand(Random rand, WeightType mu, WeightType sigma)
+        {
+            for (var nTupleID = 0; nTupleID < this.NTuples.Length; nTupleID++)
+            {
+                var w = this.Weights.AsSpan(nTupleOffset[nTupleID]);
+                ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                for (var feature = 0; feature < this.NTuples.NumPossibleFeatures[nTupleID]; feature++)
+                {
+                    var mirrored = mirror[feature];
+                    if (feature <= mirrored)
+                        w[feature] = rand.NextNormal(mu, sigma);
+                    else
+                        w[feature] = w[mirrored];
+                }
+            }
+            CopyWeightsBlackToWhite();
+
+            this.Bias = WeightType.Zero;
+        }
+
         public void CopyWeightsBlackToWhite()
         {
             var whiteOffset = this.discColorOffset[(int)DiscColor.White];
@@ -186,7 +208,36 @@ namespace KalmiaZero.Evaluation
             return x + this.Bias;
         }
 
-        public WeightType Predict(PositionFeatureVector pf) => StdSigmoid(PredictLogit(pf));
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        public unsafe WeightType PredictLogitWithBlackWeights(PositionFeatureVector posFeatureVec)
+        {
+            if (posFeatureVec.SideToMove == DiscColor.Black)
+                return PredictLogit(posFeatureVec);
+
+            var x = WeightType.Zero;
+            fixed (int* discColorOffset = this.discColorOffset)
+            fixed (WeightType* weights = &this.Weights[discColorOffset[(int)DiscColor.Black]])
+            fixed (Feature* features = posFeatureVec.Features)
+            {
+                for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+                {
+                    var w = weights + this.nTupleOffset[nTupleID];
+                    ref Feature feature = ref features[nTupleID];
+                    fixed (FeatureType* toOpp = this.NTuples.GetOpponentFeatureRawTable(nTupleID))
+                    {
+                        for (var i = 0; i < feature.Length; i++)
+                            x += w[toOpp[feature[i]]];
+                    }
+                }
+            }
+
+            return x + this.Bias;
+        }
+
+        public WeightType Predict(PositionFeatureVector pfv) => StdSigmoid(PredictLogit(pfv));
+
+        public WeightType PredictWithBlackWeights(PositionFeatureVector pfv) 
+            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : StdSigmoid(PredictWithBlackWeights(pfv));
 
         /*
          * Format:
@@ -276,7 +327,7 @@ namespace KalmiaZero.Evaluation
             return weights;
         }
 
-        static T StdSigmoid<T>(T x) where T : IFloatingPointIeee754<T>
-            => T.One / (T.One + T.Exp(-x));
+        public static WeightType StdSigmoid(WeightType x)
+            => WeightType.One / (WeightType.One + WeightType.Exp(-x));
     }
 }

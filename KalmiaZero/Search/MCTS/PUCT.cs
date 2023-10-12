@@ -21,7 +21,7 @@ namespace KalmiaZero.Search.MCTS
         // cite: https://doi.org/10.1145/3293475.3293486
         public const bool ENABLE_EXACT_WIN_MCTS = false;
 
-        public const bool ENABLE_SINGLE_THREAD_MODE = true;
+        public const bool ENABLE_SINGLE_THREAD_MODE = false;
 
         public const bool USE_UNIFORM_POLICY = false;
         public const float PUCT_FACTOR = 1.0f;

@@ -180,9 +180,6 @@ namespace KalmiaZero.NTuple
         readonly FeatureType[][] TO_OPPONENT_FEATURE;
         readonly FeatureType[][] TO_MIRRORED_FEATURE;
 
-        public readonly Span<FeatureType> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
-        public readonly Span<FeatureType> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
-
         public NTuples(Span<NTupleInfo> tuples)
         {
             this.TUPLES = tuples.ToArray();
@@ -198,6 +195,12 @@ namespace KalmiaZero.NTuple
             this.TO_MIRRORED_FEATURE = new FeatureType[this.TUPLES.Length][];
             InitMirroredFeatureTable();
         }
+
+        public readonly ReadOnlySpan<FeatureType> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
+        public readonly ReadOnlySpan<FeatureType> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
+
+        internal readonly FeatureType[] GetOpponentFeatureRawTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
+        internal readonly FeatureType[] GetMirroredFeatureRawTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
 
         void InitPowTable()
         {
