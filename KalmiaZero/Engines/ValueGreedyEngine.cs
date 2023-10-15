@@ -136,7 +136,7 @@ namespace KalmiaZero.Engines
         {
             try
             {
-                this.valueFunc = ValueFunction<Half>.LoadFromFile(e.ToString());
+                this.valueFunc = ValueFunction<double>.LoadFromFile(e.ToString());
                 this.posFeatureVec = new PositionFeatureVector(this.valueFunc.NTuples);
                 UpdateFeature();
             }

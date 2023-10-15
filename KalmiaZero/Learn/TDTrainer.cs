@@ -41,7 +41,6 @@ namespace KalmiaZero.Learn
         readonly ValueFunction<WeightType> valueFunc;
         readonly PastStatesBuffer pastStatesBuffer;
         double explorationRate;
-        WeightType[][]? weightGrads;
         WeightType[][]? weightDeltaSum;
         WeightType[][]? weightDeltaAbsSum;
         WeightType[]? biasDeltaSum;
@@ -64,7 +63,6 @@ namespace KalmiaZero.Learn
         public void Train()
         {
             this.explorationRate = this.CONFIG.InitialExplorationRate;
-            this.weightGrads = new WeightType[this.valueFunc.NTuples.Length][];
             this.weightDeltaSum = new WeightType[this.valueFunc.NTuples.Length][];
             this.weightDeltaAbsSum = new WeightType[this.valueFunc.NTuples.Length][];
             this.biasDeltaSum = Enumerable.Repeat(WeightType.CreateChecked(TCL_EPSILON), this.valueFunc.NTuples.Length).ToArray();
@@ -73,7 +71,6 @@ namespace KalmiaZero.Learn
             for(var nTupleID = 0; nTupleID < this.valueFunc.NTuples.Length; nTupleID++)
             {
                 var len = numFeatures[nTupleID];
-                this.weightGrads[nTupleID] = new WeightType[len];
                 this.weightDeltaSum[nTupleID] = Enumerable.Repeat(WeightType.CreateChecked(TCL_EPSILON), len).ToArray();
                 this.weightDeltaAbsSum[nTupleID] = Enumerable.Repeat(WeightType.CreateChecked(TCL_EPSILON), len).ToArray();
             }
