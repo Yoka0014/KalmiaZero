@@ -75,6 +75,9 @@ namespace KalmiaZero.NTuple
     /// </summary>
     public class PositionFeatureVector
     {
+        public static PositionFeatureVector Empty => EMPTY;
+        static readonly PositionFeatureVector EMPTY = new();
+
         public DiscColor SideToMove { get; private set; }
         public int NumNTuples => this.NTuples.Length;
         public NTuples NTuples { get; }
@@ -103,6 +106,15 @@ namespace KalmiaZero.NTuple
             (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
             
             InitFeatureDiffTable();
+        }
+
+        PositionFeatureVector()
+        {
+            this.NTuples = new NTuples();
+            this.Features = Array.Empty<Feature>();
+            this.featureDiffTable = Array.Empty<FeatureDiff>();
+            (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
+            (this.playerRestorer, this.opponentRestorer) = (Undo<White>, Undo<Black>);
         }
 
         public PositionFeatureVector(PositionFeatureVector pf)

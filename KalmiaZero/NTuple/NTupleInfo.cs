@@ -196,6 +196,15 @@ namespace KalmiaZero.NTuple
             InitMirroredFeatureTable();
         }
 
+        public NTuples()
+        {
+            this.TUPLES = Array.Empty<NTupleInfo>();
+            this.POW_TABLE = Array.Empty<int>();
+            this.NUM_POSSIBLE_FEATURES = Array.Empty<int>();
+            this.TO_OPPONENT_FEATURE = Array.Empty<FeatureType[]>();
+            this.TO_MIRRORED_FEATURE = Array.Empty<FeatureType[]>();
+        }
+
         public readonly ReadOnlySpan<FeatureType> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
         public readonly ReadOnlySpan<FeatureType> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
 
