@@ -145,6 +145,7 @@ namespace KalmiaZero.NTuple
             }
         }
 
+        [MethodImpl(MethodImplOptions.NoOptimization)]
         void InitFeatureDiffTable()
         {
             var diffs = new List<(int nTupleID, int idx, FeatureType diff)>();
@@ -152,13 +153,12 @@ namespace KalmiaZero.NTuple
             for (var coord = BoardCoordinate.A1; coord <= BoardCoordinate.H8; coord++)
             {
                 diffs.Clear();
-                diffs.Clear();
                 for (var nTupleID = 0; nTupleID < tuples.Length; nTupleID++)
                 {
                     for (var idx = 0; idx < tuples[nTupleID].NumSymmetricExpansions; idx++)
                     {
                         var coords = tuples[nTupleID].GetCoordinates(idx);
-                        var coordIdx = coords.IndexOf(coord);
+                        var coordIdx = Array.IndexOf(coords.ToArray(), coord);
                         if (coordIdx != -1)
                             diffs.Add((nTupleID, idx, (FeatureType)this.NTuples.PowTable[coords.Length - coordIdx - 1]));
                     }

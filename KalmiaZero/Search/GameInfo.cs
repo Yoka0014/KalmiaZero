@@ -16,7 +16,7 @@ namespace KalmiaZero.Search
         readonly Move[] moves = new Move[Constants.MAX_NUM_MOVES];
         int numMoves = 0;
 
-        public GameInfo(NTuples nTuples) => this.FeatureVector = new PositionFeatureVector(nTuples);
+        public GameInfo(NTuples nTuples) : this(new Position(), nTuples) { }
 
         public GameInfo(Position pos, NTuples nTuples)
         {
@@ -71,6 +71,15 @@ namespace KalmiaZero.Search
         {
             this.Position.Undo(ref move);
             InitMoves();
+            this.FeatureVector.Undo(ref move, this.Moves);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Undo(ref Move move, Span<Move> moves)
+        {
+            this.Position.Undo(ref move);
+            moves.CopyTo(this.moves);
+            this.numMoves = moves.Length;
             this.FeatureVector.Undo(ref move, this.Moves);
         }
 

@@ -237,7 +237,7 @@ namespace KalmiaZero.Evaluation
         public WeightType Predict(PositionFeatureVector pfv) => StdSigmoid(PredictLogit(pfv));
 
         public WeightType PredictWithBlackWeights(PositionFeatureVector pfv) 
-            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : StdSigmoid(PredictWithBlackWeights(pfv));
+            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : StdSigmoid(PredictLogitWithBlackWeights(pfv));
 
         /*
          * Format:

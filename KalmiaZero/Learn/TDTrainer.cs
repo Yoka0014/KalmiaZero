@@ -83,16 +83,23 @@ namespace KalmiaZero.Learn
                 RunEpisode(explorationRate);
                 explorationRate -= EXPLORATION_RATE_DELTA;
 
-                if((episodeID + 1) % this.CONFIG.SaveWeightsInterval == 0)
-                    this.valueFunc.SaveToFile(string.Format(this.WEIGHTS_FILE_PATH, episodeID));
+                if ((episodeID + 1) % this.CONFIG.SaveWeightsInterval == 0)
+                {
+                    var path = string.Format(this.WEIGHTS_FILE_PATH, episodeID);
+                    this.valueFunc.SaveToFile(path);
+                    Console.WriteLine($"Info: saved weights at \"{path}\"");
+                }
             }
         }
 
+        [SkipLocalsInit]
         void RunEpisode(double explorationRate)
         {
             var game = new GameInfo(valueFunc.NTuples);
             pastStatesBuffer.Clear();
             pastStatesBuffer.Add(game.FeatureVector);
+            Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
+            int numMoves;
 
             var moveCount = 0;
             while (true)
@@ -123,11 +130,14 @@ namespace KalmiaZero.Learn
                 }
                 else    // greedy
                 {
+                    game.Moves.CopyTo(moves);
+                    numMoves = game.Moves.Length;
+
                     moveIdx = 0;
                     var minVLogit = WeightType.PositiveInfinity;
-                    for (var i = 0; i < game.Moves.Length; i++)
+                    for (var i = 0; i < numMoves; i++)
                     {
-                        ref Move move = ref game.Moves[i];
+                        ref Move move = ref moves[i];
                         game.Position.GenerateMove(ref move);
                         game.Update(ref move);
                         WeightType vLogit = this.valueFunc.PredictLogitWithBlackWeights(game.FeatureVector);
@@ -136,10 +146,10 @@ namespace KalmiaZero.Learn
                             minVLogit = vLogit;
                             moveIdx = i;
                         }
-                        game.Undo(ref move);
+                        game.Undo(ref move, moves[..numMoves]);
                     }
 
-                    game.Update(ref game.Moves[moveIdx]);
+                    game.Update(ref moves[moveIdx]);
 
                     if (game.Moves.Length == 0 && game.Position.IsGameOver) // terminal state
                     {
