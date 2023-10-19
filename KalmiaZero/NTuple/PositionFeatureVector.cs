@@ -145,7 +145,6 @@ namespace KalmiaZero.NTuple
             }
         }
 
-        [MethodImpl(MethodImplOptions.NoOptimization)]
         void InitFeatureDiffTable()
         {
             var diffs = new List<(int nTupleID, int idx, FeatureType diff)>();
@@ -376,10 +375,10 @@ namespace KalmiaZero.NTuple
         void AssertFeaturesAreValid()
         {
 #if DEBUG && ENABLE_FEATURES_VALIDATION_CHECK
-            for (var nTupleID = 0; nTupleID < this.features.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.Features.Length; nTupleID++)
             {
                 ReadOnlySpan<NTupleInfo> tuples = this.NTuples.Tuples;
-                ref Feature f = ref this.features[nTupleID];
+                ref Feature f = ref this.Features[nTupleID];
                 for (var i = 0; i < tuples[nTupleID].NumSymmetricExpansions; i++)
                     Debug.Assert(f[i] >= 0 && f[i] < this.NTuples.NumPossibleFeatures[nTupleID]);
             }
