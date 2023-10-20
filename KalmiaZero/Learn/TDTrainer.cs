@@ -92,7 +92,6 @@ namespace KalmiaZero.Learn
             }
         }
 
-        [SkipLocalsInit]
         void RunEpisode(double explorationRate)
         {
             var game = new GameInfo(valueFunc.NTuples);
@@ -183,8 +182,8 @@ namespace KalmiaZero.Learn
                     else
                         ApplyGradients<White>(posFeatureVec, weights, alpha, beta, delta);
 
-                    var e = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
-                    var lr = alpha * g(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
+                    var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
+                    var lr = reg * alpha * g(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
                     var db = lr * delta;
                     this.valueFunc.Bias += db;
                     this.biasDeltaSum += db;

@@ -11,6 +11,7 @@ using System.Text;
 using KalmiaZero.Learn;
 using KalmiaZero.Search;
 using KalmiaZero.NTuple;
+using System.Diagnostics;
 
 namespace KalmiaZero
 {
@@ -23,7 +24,7 @@ namespace KalmiaZero
             //var nboard = new NBoard();
             //nboard.Mainloop(engine);
 
-            var valueFunc = ValueFunction<float>.LoadFromFile("value_func_weights_td_512999.bin");
+            var valueFunc = ValueFunction<float>.LoadFromFile("value_func_weights_td_2499999.bin");
             var pos = new Position();
             var pfv = new PositionFeatureVector(valueFunc.NTuples);
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
@@ -31,10 +32,14 @@ namespace KalmiaZero
             pfv.Init(ref pos, moves[..num]);
             Console.WriteLine(valueFunc.Predict(pfv));
 
+            //var sw = new Stopwatch();
             //var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
             //valueFunc.InitWeightsWithNormalRand(0.0f, 0.0001f);
-            //var tdTrainer = new TDTrainer<float>(valueFunc, new TDTrainerConfig<float> { NumEpisodes = 25_000_000, FinalExplorationRate = 0.1f });
+            //var tdTrainer = new TDTrainer<float>(valueFunc, new TDTrainerConfig<float> { NumEpisodes = 250_000, FinalExplorationRate = 0.1f });
+            //sw.Start();
             //tdTrainer.Train();
+            //sw.Stop();
+            //Console.WriteLine(sw.ElapsedMilliseconds);
         }
     }
 }
