@@ -264,7 +264,7 @@ namespace KalmiaZero.Learn
                     this.biasDeltaAbsSum += WeightType.Abs(db);
 
                     eligibility *= this.CONFIG.DiscountRate * this.CONFIG.EligibilityTraceFactor;
-                    tdError = this.CONFIG.DiscountRate - WeightType.One - tdError;  // inverse tdError: DiscountRate * (1.0 - nextV) - (1.0 - v)
+                    tdError *= -WeightType.One;
                 }
             }
         }
