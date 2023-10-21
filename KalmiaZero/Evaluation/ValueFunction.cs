@@ -189,7 +189,7 @@ namespace KalmiaZero.Evaluation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public unsafe WeightType PredictLogit(PositionFeatureVector posFeatureVec)
+        public unsafe WeightType PredictRaw(PositionFeatureVector posFeatureVec)
         {
             var x = WeightType.Zero;
             fixed (int* discColorOffset = this.discColorOffset)
@@ -209,10 +209,10 @@ namespace KalmiaZero.Evaluation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public unsafe WeightType PredictLogitWithBlackWeights(PositionFeatureVector posFeatureVec)
+        public unsafe WeightType PredictRawWithBlackWeights(PositionFeatureVector posFeatureVec)
         {
             if (posFeatureVec.SideToMove == DiscColor.Black)
-                return PredictLogit(posFeatureVec);
+                return PredictRaw(posFeatureVec);
 
             var x = WeightType.Zero;
             fixed (int* discColorOffset = this.discColorOffset)
@@ -234,10 +234,12 @@ namespace KalmiaZero.Evaluation
             return x + this.Bias;
         }
 
-        public WeightType Predict(PositionFeatureVector pfv) => StdSigmoid(PredictLogit(pfv));
+        public WeightType Predict(PositionFeatureVector pfv) => WeightType.Tanh(PredictRaw(pfv));
 
         public WeightType PredictWithBlackWeights(PositionFeatureVector pfv) 
-            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : StdSigmoid(PredictLogitWithBlackWeights(pfv));
+            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : WeightType.Tanh(PredictRawWithBlackWeights(pfv));
+
+        public WeightType PredictWinRate(PositionFeatureVector pfv) => (Predict(pfv) + WeightType.One) / (WeightType.One + WeightType.One);
 
         /*
          * Format:
@@ -326,8 +328,5 @@ namespace KalmiaZero.Evaluation
             }
             return weights;
         }
-
-        public static WeightType StdSigmoid(WeightType x)
-            => WeightType.One / (WeightType.One + WeightType.Exp(-x));
     }
 }

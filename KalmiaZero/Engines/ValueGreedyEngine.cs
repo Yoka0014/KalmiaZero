@@ -58,7 +58,7 @@ namespace KalmiaZero.Engines
                 pos.Update(ref nextMoves[i]);
                 var numMoves = pos.GetNextMoves(ref legalMoves);
                 pf.Update(ref nextMoves[i], legalMoves[..numMoves]);
-                values[i] = 1.0 - this.valueFunc.Predict(pf);
+                values[i] = 1.0 - this.valueFunc.PredictWinRate(pf);
                 pos.Undo(ref nextMoves[i]);
             }
 

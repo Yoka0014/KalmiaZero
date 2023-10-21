@@ -745,7 +745,7 @@ namespace KalmiaZero.Search.MCTS
                 game.Position.GenerateMove(ref move);
                 edge.Move = move;
                 game.Update(ref edge.Move);
-                edge.Value = (Half)(value = 1 - this.valueFunc.Predict(game.FeatureVector));
+                edge.Value = (Half)(value = 1 - this.valueFunc.PredictWinRate(game.FeatureVector));
                 expValueSum += expValues[i] = !USE_UNIFORM_POLICY ? FastMath.Exp(value) : uniformProb;
                 game.Undo(ref edge.Move, edges);
             }

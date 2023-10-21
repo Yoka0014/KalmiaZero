@@ -42,8 +42,10 @@ namespace KalmiaZero
             //Console.WriteLine(sw.ElapsedMilliseconds);
 
             var sw = new Stopwatch();
+            sw.Start();
             TDTrainer<float>.TrainMultipleAgents(Environment.CurrentDirectory,
                 new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 20, 7, 100);
+            sw.Stop();
             Console.WriteLine(sw.ElapsedMilliseconds);
         }
     }
