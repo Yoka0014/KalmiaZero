@@ -209,7 +209,7 @@ namespace KalmiaZero.Learn
                     var numMoves = pos.GetNextMoves(ref moves);
                     featureVec.Init(ref pos, moves[..numMoves]);
                     var y = this.valueFunc.Predict(featureVec);
-                    var delta = y - batch[i].Output;
+                    var delta = (batch[i].Output - y) * (WeightType.One - y * y);
                     loss += LossFunctions.BinaryCrossEntropy(y, batch[i].Output);
 
                     for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)

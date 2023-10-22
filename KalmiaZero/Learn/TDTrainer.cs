@@ -211,16 +211,16 @@ namespace KalmiaZero.Learn
                     numMoves = game.Moves.Length;
 
                     moveIdx = 0;
-                    var minVLogit = WeightType.PositiveInfinity;
+                    var minVRaw = WeightType.PositiveInfinity;
                     for (var i = 0; i < numMoves; i++)
                     {
                         ref Move move = ref moves[i];
                         game.Position.GenerateMove(ref move);
                         game.Update(ref move);
-                        WeightType vLogit = this.valueFunc.PredictLogitWithBlackWeights(game.FeatureVector);
-                        if (vLogit < minVLogit)
+                        WeightType vRaw = this.valueFunc.PredictRawWithBlackWeights(game.FeatureVector);
+                        if (vRaw < minVRaw)
                         {
-                            minVLogit = vLogit;
+                            minVRaw = vRaw;
                             moveIdx = i;
                         }
                         game.Undo(ref move, moves[..numMoves]);
@@ -262,8 +262,8 @@ namespace KalmiaZero.Learn
         unsafe void Adapt(WeightType tdError)
         {
             var alpha = this.CONFIG.LearningRate;
-            var beta = this.CONFIG.TCLFactor;
             var eligibility = WeightType.One;
+            var vGrad = WeightType.One - v * v;
 
             fixed (WeightType* weights = this.valueFunc.Weights)
             {
@@ -319,14 +319,15 @@ namespace KalmiaZero.Learn
                         var f = (typeof(DiscColor) == typeof(Black)) ? feature[j] : opp[feature[j]];
                         var mf = mirror[f];
 
-                        var lr = reg * alpha * Decay(WeightType.Abs(dwSum[i]) / dwAbsSum[i]);
+                        var lr = reg * Decay(WeightType.Abs(dwSum[i]) / dwAbsSum[i]);
                         var dw = lr * delta;
                         var absDW = WeightType.Abs(dw);
 
                         if (mf != f)
                         {
-                            dw *= WeightType.CreateChecked(0.5);
-                            absDW *= WeightType.CreateChecked(0.5);
+                            var half = WeightType.One / (WeightType.One + WeightType.One);
+                            dw *= half;
+                            absDW *= half;
                             w[mf] += dw;
                             dwSum[mf] += dw;
                             dwAbsSum[mf] += absDW;
