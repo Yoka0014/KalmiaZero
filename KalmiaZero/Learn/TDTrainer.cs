@@ -175,6 +175,7 @@ namespace KalmiaZero.Learn
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
             int numMoves;
 
+            var lastMove = Move.Pass;
             var moveCount = 0;
             while (true)
             {
@@ -182,6 +183,7 @@ namespace KalmiaZero.Learn
                 {
                     game.Pass();
                     this.pastStatesBuffer.Add(game.FeatureVector);
+                    lastMove.Coord = BoardCoordinate.Pass;
                     continue;
                 }
 
@@ -196,11 +198,12 @@ namespace KalmiaZero.Learn
 
                     if (game.Moves.Length == 0 && game.Position.IsGameOver) 
                     {
-                        Fit(GetReward(game.Position.DiscDiff) - v);
+                        Finalize(ref move, v);
                         break;
                     }
 
                     nextV = WeightType.One - this.valueFunc.PredictWithBlackWeights(game.FeatureVector);
+                    lastMove = move;
                 }
                 else    // greedy
                 {
@@ -227,20 +230,36 @@ namespace KalmiaZero.Learn
 
                     if (game.Moves.Length == 0 && game.Position.IsGameOver) // terminal state
                     {
-                        Fit(GetReward(game.Position.DiscDiff) - v);
+                        Finalize(ref moves[moveIdx], v);
                         break;
                     }
 
                     nextV = WeightType.One - ValueFunction<WeightType>.StdSigmoid(minVLogit);
+                    lastMove = moves[moveIdx];
                 }
 
-                Fit(this.CONFIG.DiscountRate * nextV - v);
+                Adapt(this.CONFIG.DiscountRate * nextV - v);
                 this.pastStatesBuffer.Add(game.FeatureVector);
                 moveCount++;
             }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            void Finalize(ref Move move, WeightType v)
+            {
+                var reward = GetReward(game.Position.DiscDiff);
+                Adapt(WeightType.One - reward - v);
+
+                game.Undo(ref move);
+                if (lastMove.Coord != BoardCoordinate.Pass)
+                    game.Undo(ref lastMove);
+                else
+                    game.Pass();
+
+                FinalAdapt(game.FeatureVector, reward);
+            }
         }
 
-        unsafe void Fit(WeightType tdError)
+        unsafe void Adapt(WeightType tdError)
         {
             var alpha = this.CONFIG.LearningRate;
             var beta = this.CONFIG.TCLFactor;
@@ -251,26 +270,36 @@ namespace KalmiaZero.Learn
                 foreach (var posFeatureVec in this.pastStatesBuffer)
                 {
                     var delta = eligibility * tdError;
-                    if (posFeatureVec.SideToMove == DiscColor.Black)
-                        ApplyGradients<Black>(posFeatureVec, weights, alpha, beta, delta);
-                    else
-                        ApplyGradients<White>(posFeatureVec, weights, alpha, beta, delta);
-
-                    var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
-                    var lr = reg * alpha * Decay(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
-                    var db = lr * delta;
-                    this.valueFunc.Bias += db;
-                    this.biasDeltaSum += db;
-                    this.biasDeltaAbsSum += WeightType.Abs(db);
-
+                    ApplyGradients(posFeatureVec, weights, alpha, delta);
                     eligibility *= this.CONFIG.DiscountRate * this.CONFIG.EligibilityTraceFactor;
                     tdError = this.CONFIG.DiscountRate - WeightType.One - tdError;  // inverse tdError: DiscountRate * (1.0 - nextV) - (1.0 - v)
                 }
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        unsafe void ApplyGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType beta, WeightType delta) where DiscColor : IDiscColor
+        unsafe void FinalAdapt(PositionFeatureVector posFeatureVec, WeightType reward)
+        {
+            WeightType v = this.valueFunc.PredictWithBlackWeights(posFeatureVec);
+            fixed (WeightType* weights = this.valueFunc.Weights)
+                ApplyGradients(posFeatureVec, weights, this.CONFIG.LearningRate, reward - v);
+        }
+
+        unsafe void ApplyGradients(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType delta)
+        {
+            if (posFeatureVec.SideToMove == DiscColor.Black)
+                ApplyWeightGradients<Black>(posFeatureVec, weights, alpha, delta);
+            else
+                ApplyWeightGradients<White>(posFeatureVec, weights, alpha, delta);
+
+            var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
+            var lr = reg * alpha * Decay(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
+            var db = lr * delta;
+            this.valueFunc.Bias += db;
+            this.biasDeltaSum += db;
+            this.biasDeltaAbsSum += WeightType.Abs(db);
+        }
+
+        unsafe void ApplyWeightGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType delta) where DiscColor : IDiscColor
         {
             Debug.Assert(this.weightDeltaSum is not null);
             Debug.Assert(this.weightDeltaAbsSum is not null);
@@ -318,7 +347,7 @@ namespace KalmiaZero.Learn
             if (discDiff == 0)
                 return WeightType.One / (WeightType.One + WeightType.One);
             else
-                return (discDiff > 0) ? WeightType.Zero : WeightType.One;
+                return (discDiff > 0) ? WeightType.One : WeightType.Zero;
         }
 
         class PastStatesBuffer : IEnumerable<PositionFeatureVector>
