@@ -241,6 +241,8 @@ namespace KalmiaZero.Evaluation
 
         public WeightType PredictWinRate(PositionFeatureVector pfv) => (Predict(pfv) + WeightType.One) / (WeightType.One + WeightType.One);
 
+        public static WeightType CalcGradient(WeightType v) => WeightType.One - v * v;
+
         /*
          * Format:
          * 

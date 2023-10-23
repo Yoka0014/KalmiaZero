@@ -19,7 +19,7 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
-            //var engine = new PUCTEngine();
+            //var engine = new ValueGreedyEngine();
             //var nboard = new NBoard();
             //nboard.Mainloop(engine);
 
@@ -29,7 +29,7 @@ namespace KalmiaZero
             //Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
             //var num = pos.GetNextMoves(ref moves);
             //pfv.Init(ref pos, moves[..num]);
-            //Console.WriteLine(valueFunc.Predict(pfv));
+            //Console.WriteLine(valueFunc.PredictWinRate(pfv));
 
             var sw = new Stopwatch();
             var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
@@ -41,8 +41,10 @@ namespace KalmiaZero
             Console.WriteLine(sw.ElapsedMilliseconds);
 
             //var sw = new Stopwatch();
+            //sw.Start();
             //TDTrainer<float>.TrainMultipleAgents(Environment.CurrentDirectory,
             //    new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 20, 7, 100);
+            //sw.Stop();
             //Console.WriteLine(sw.ElapsedMilliseconds);
         }
     }
