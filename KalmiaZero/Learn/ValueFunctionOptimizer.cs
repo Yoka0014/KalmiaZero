@@ -71,7 +71,7 @@ namespace KalmiaZero.Learn
                          select (from nTupleID in Enumerable.Range(0, nTuples.Length)
                                  select new WeightType[nTuples.NumPossibleFeatures[nTupleID]]).ToArray()).ToArray();
 
-            var aggregatedGrads = (from nTupleID in Enumerable.Range(0, nTuples.Length) 
+            var aggregatedGrads = (from nTupleID in Enumerable.Range(0, nTuples.Length)
                                    select new WeightType[nTuples.NumPossibleFeatures[nTupleID]]).ToArray();
 
             var biasGrad = new WeightType[this.options.NumThreads];
@@ -81,7 +81,7 @@ namespace KalmiaZero.Learn
             var bestTestLoss = WeightType.PositiveInfinity;
             var prevTrainLoss = WeightType.PositiveInfinity;
             var prevTestLoss = WeightType.PositiveInfinity;
-            for(var epoch = 0; epoch < this.options.NumEpoch; epoch++)
+            for (var epoch = 0; epoch < this.options.NumEpoch; epoch++)
             {
                 Console.WriteLine($"epoch {epoch}:");
 
@@ -101,7 +101,7 @@ namespace KalmiaZero.Learn
                 this.lossHistroy.Add((trainLoss, testLoss));
 
                 var trainLossDiff = trainLoss - prevTrainLoss;
-                if(WeightType.Abs(trainLossDiff) < this.options.Epsilon)
+                if (WeightType.Abs(trainLossDiff) < this.options.Epsilon)
                 {
                     Console.WriteLine("converged.");
                     SaveWeights();
@@ -138,8 +138,8 @@ namespace KalmiaZero.Learn
             this.valueFunc.SaveToFile(Path.Combine(this.WORK_DIR_PATH, this.options.WeightsFileName));
 
             var trainLossSb = new StringBuilder("[");
-            var testLossSb = new StringBuilder("[");   
-            foreach((var trainLoss, var testLoss) in this.lossHistroy)
+            var testLossSb = new StringBuilder("[");
+            foreach ((var trainLoss, var testLoss) in this.lossHistroy)
             {
                 trainLossSb.Append(trainLoss).Append(", ");
                 testLossSb.Append(testLoss).Append(", ");
@@ -159,7 +159,7 @@ namespace KalmiaZero.Learn
             TrainDataItem[] data = TrainData.LoadFromFile(path);
             var batch = new BatchItem<WeightType>[data.Length];
 
-            for(var i = 0; i < batch.Length; i++)
+            for (var i = 0; i < batch.Length; i++)
             {
                 ref var batchItem = ref batch[i];
                 ref var dataItem = ref data[i];
@@ -209,7 +209,7 @@ namespace KalmiaZero.Learn
                     var numMoves = pos.GetNextMoves(ref moves);
                     featureVec.Init(ref pos, moves[..numMoves]);
                     var y = this.valueFunc.Predict(featureVec);
-                    var delta = (batch[i].Output - y) * (WeightType.One - y * y);
+                    var delta = y - batch[i].Output;
                     loss += LossFunctions.BinaryCrossEntropy(y, batch[i].Output);
 
                     for (var nTupleID = 0; nTupleID < nTuples.Length; nTupleID++)
@@ -239,7 +239,7 @@ namespace KalmiaZero.Learn
             Parallel.For(0, grads.Length, this.parallelOptions, threadID =>
             {
                 var gradsPerThread = grads[threadID];
-                for(var nTupleID = 0; nTupleID <gradsPerThread.Length; nTupleID++)
+                for (var nTupleID = 0; nTupleID < gradsPerThread.Length; nTupleID++)
                 {
                     var ag = aggregated[nTupleID];
                     var g = gradsPerThread[nTupleID];
@@ -254,7 +254,7 @@ namespace KalmiaZero.Learn
             var eta = this.options.LearningRate;
 
             fixed (WeightType* weight = this.valueFunc.Weights)
-            fixed(int* nTupleOffset = this.valueFunc.NTupleOffset)
+            fixed (int* nTupleOffset = this.valueFunc.NTupleOffset)
             {
                 for (var nTupleID = 0; nTupleID < grads.Length; nTupleID++)
                 {
@@ -280,7 +280,7 @@ namespace KalmiaZero.Learn
             var numRestItems = batch.Length % this.options.NumThreads;
 
             var loss = WeightType.Zero;
-            Parallel.For(0, this.options.NumThreads, this.parallelOptions, 
+            Parallel.For(0, this.options.NumThreads, this.parallelOptions,
                 threadID => AtomicOperations.Add(ref loss, calcLoss(batch.AsSpan(threadID * numItemsPerThread, numItemsPerThread))));
 
             loss += calcLoss(batch.AsSpan(this.options.NumThreads * numItemsPerThread, numRestItems));

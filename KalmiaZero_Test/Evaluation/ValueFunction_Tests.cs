@@ -77,7 +77,7 @@ namespace KalmiaZero_Test.Evaluation
                 }
 
                 passCount = 0;
-                var expected = valueFunc.PredictRaw(pfv);
+                var expected = valueFunc.PredictLogit(pfv);
                 for (var i = 0; i < 3; i++)
                 {
                     pos.Rotate90Clockwise();
@@ -85,7 +85,7 @@ namespace KalmiaZero_Test.Evaluation
                         moves[j].Coord = Utils.TO_ROTATE90_COORD[(int)moves[j].Coord];
 
                     pfv.Init(ref pos, moves[..numMoves]);
-                    Assert.AreEqual(expected, valueFunc.PredictRaw(pfv), DELTA);
+                    Assert.AreEqual(expected, valueFunc.PredictLogit(pfv), DELTA);
                 }
 
                 pos.Rotate90Clockwise();
@@ -99,7 +99,7 @@ namespace KalmiaZero_Test.Evaluation
                 for (var i = 0; i < 4; i++)
                 {
                     pfv.Init(ref pos, moves[..numMoves]);
-                    Assert.AreEqual(expected, valueFunc.PredictRaw(pfv), DELTA);
+                    Assert.AreEqual(expected, valueFunc.PredictLogit(pfv), DELTA);
                     pos.Rotate90Clockwise();
                     for (var j = 0; j < numMoves; j++)
                         moves[j].Coord = Utils.TO_ROTATE90_COORD[(int)moves[j].Coord];
@@ -154,7 +154,7 @@ namespace KalmiaZero_Test.Evaluation
                 }
 
                 passCount = 0;
-                Assert.AreEqual(valueFunc.PredictRaw(pfv), valueFunc.PredictRawWithBlackWeights(pfv), DELTA);
+                Assert.AreEqual(valueFunc.PredictLogit(pfv), valueFunc.PredictLogitWithBlackWeights(pfv), DELTA);
 
                 var move = moves[Random.Shared.Next(numMoves)];
                 history.Add(move.Coord);

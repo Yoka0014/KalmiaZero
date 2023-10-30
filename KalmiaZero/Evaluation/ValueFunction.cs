@@ -189,7 +189,7 @@ namespace KalmiaZero.Evaluation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public unsafe WeightType PredictRaw(PositionFeatureVector posFeatureVec)
+        public unsafe WeightType PredictLogit(PositionFeatureVector posFeatureVec)
         {
             var x = WeightType.Zero;
             fixed (int* discColorOffset = this.discColorOffset)
@@ -209,10 +209,10 @@ namespace KalmiaZero.Evaluation
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public unsafe WeightType PredictRawWithBlackWeights(PositionFeatureVector posFeatureVec)
+        public unsafe WeightType PredictLogitWithBlackWeights(PositionFeatureVector posFeatureVec)
         {
             if (posFeatureVec.SideToMove == DiscColor.Black)
-                return PredictRaw(posFeatureVec);
+                return PredictLogit(posFeatureVec);
 
             var x = WeightType.Zero;
             fixed (int* discColorOffset = this.discColorOffset)
@@ -234,14 +234,10 @@ namespace KalmiaZero.Evaluation
             return x + this.Bias;
         }
 
-        public WeightType Predict(PositionFeatureVector pfv) => WeightType.Tanh(PredictRaw(pfv));
+        public WeightType Predict(PositionFeatureVector pfv) => StdSigmoid(PredictLogit(pfv));
 
-        public WeightType PredictWithBlackWeights(PositionFeatureVector pfv) 
-            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : WeightType.Tanh(PredictRawWithBlackWeights(pfv));
-
-        public WeightType PredictWinRate(PositionFeatureVector pfv) => (Predict(pfv) + WeightType.One) / (WeightType.One + WeightType.One);
-
-        public static WeightType CalcGradient(WeightType v) => WeightType.One - v * v;
+        public WeightType PredictWithBlackWeights(PositionFeatureVector pfv)
+            => (pfv.SideToMove == DiscColor.Black) ? Predict(pfv) : StdSigmoid(PredictLogitWithBlackWeights(pfv));
 
         /*
          * Format:
@@ -330,5 +326,8 @@ namespace KalmiaZero.Evaluation
             }
             return weights;
         }
+
+        public static WeightType StdSigmoid(WeightType x)
+            => WeightType.One / (WeightType.One + WeightType.Exp(-x));
     }
 }

@@ -1,4 +1,8 @@
-﻿using System;
+﻿//#define ENGINE
+//#define RL
+#define MULTI_RL
+
+using System;
 
 using KalmiaZero.Reversi;
 using KalmiaZero.Protocols;
@@ -19,33 +23,31 @@ namespace KalmiaZero
     {
         static void Main(string[] args)
         {
-            //var engine = new ValueGreedyEngine();
-            //var nboard = new NBoard();
-            //nboard.Mainloop(engine);
+#if ENGINE
+            var engine = new PUCTEngine();
+            var nboard = new NBoard();
+            nboard.Mainloop(engine);
+#endif
 
-            //var valueFunc = ValueFunction<float>.LoadFromFile("value_func_weights_td_249999.bin");
-            //var pos = new Position();
-            //var pfv = new PositionFeatureVector(valueFunc.NTuples);
-            //Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
-            //var num = pos.GetNextMoves(ref moves);
-            //pfv.Init(ref pos, moves[..num]);
-            //Console.WriteLine(valueFunc.PredictWinRate(pfv));
-
+#if RL
             var sw = new Stopwatch();
             var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
-            valueFunc.InitWeightsWithNormalRand(0.0f, 0.0001f);
+            valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
             var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 });
             sw.Start();
             tdTrainer.Train();
             sw.Stop();
             Console.WriteLine(sw.ElapsedMilliseconds);
+#endif
 
-            //var sw = new Stopwatch();
-            //sw.Start();
-            //TDTrainer<float>.TrainMultipleAgents(Environment.CurrentDirectory,
-            //    new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 20, 7, 100);
-            //sw.Stop();
-            //Console.WriteLine(sw.ElapsedMilliseconds);
+#if MULTI_RL
+            var sw = new Stopwatch();
+            sw.Start();
+            TDTrainer<float>.TrainMultipleAgents(Environment.CurrentDirectory,
+                new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 20, 7, 100);
+            sw.Stop();
+            Console.WriteLine(sw.ElapsedMilliseconds);
+#endif
         }
     }
 }

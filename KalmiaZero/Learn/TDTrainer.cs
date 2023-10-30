@@ -41,7 +41,7 @@ namespace KalmiaZero.Learn
         public string Label { get; }
         readonly TDTrainerConfig<WeightType> CONFIG;
         readonly double EXPLORATION_RATE_DELTA;
-        readonly string WEIGHTS_FILE_PATH; 
+        readonly string WEIGHTS_FILE_PATH;
 
         readonly ValueFunction<WeightType> valueFunc;
         readonly PastStatesBuffer pastStatesBuffer;
@@ -62,7 +62,7 @@ namespace KalmiaZero.Learn
             this.WEIGHTS_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.WeightsFileName}_{"{0}"}.bin");
 
             this.valueFunc = valueFunc;
-            var capasity = int.CreateChecked(WeightType.Log(config.HorizonCutFactor, config.EligibilityTraceFactor)) + 1; 
+            var capasity = int.CreateChecked(WeightType.Log(config.HorizonCutFactor, config.EligibilityTraceFactor)) + 1;
             this.pastStatesBuffer = new PastStatesBuffer(capasity, valueFunc.NTuples);
 
             this.rand = (randSeed >= 0) ? new Random(randSeed) : new Random(Random.Shared.Next());
@@ -71,14 +71,14 @@ namespace KalmiaZero.Learn
         public static void TrainMultipleAgents(string workDir, TDTrainerConfig<WeightType> config, int numAgents, int tupleSize, int numTuples)
             => TrainMultipleAgents(workDir, config, numAgents, tupleSize, numTuples, Environment.ProcessorCount);
 
-        public static void TrainMultipleAgents(string workDir, TDTrainerConfig<WeightType> config, int numAgents, int tupleSize, int numTuples, int numThreads) 
+        public static void TrainMultipleAgents(string workDir, TDTrainerConfig<WeightType> config, int numAgents, int tupleSize, int numTuples, int numThreads)
         {
             var options = new ParallelOptions { MaxDegreeOfParallelism = numThreads };
             Parallel.For(0, numAgents, options, agentID =>
             {
                 var dir = $"AG-{agentID}";
                 Path.Combine(workDir, dir);
-                if(!Directory.Exists(dir))
+                if (!Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
                 var tuples = (from _ in Enumerable.Range(0, numTuples) select new NTupleInfo(tupleSize)).ToArray();
@@ -97,7 +97,7 @@ namespace KalmiaZero.Learn
             this.weightDeltaSum = new WeightType[this.valueFunc.NTuples.Length][];
             this.weightDeltaAbsSum = new WeightType[this.valueFunc.NTuples.Length][];
             var numFeatures = this.valueFunc.NTuples.NumPossibleFeatures;
-            for(var nTupleID = 0; nTupleID < this.valueFunc.NTuples.Length; nTupleID++)
+            for (var nTupleID = 0; nTupleID < this.valueFunc.NTuples.Length; nTupleID++)
             {
                 var len = numFeatures[nTupleID];
                 this.weightDeltaSum[nTupleID] = Enumerable.Repeat(tclEpsilon, len).ToArray();
@@ -154,9 +154,9 @@ namespace KalmiaZero.Learn
 
             var count = 0;
             var sum = WeightType.Zero;
-            for(var i = 0; i < this.valueFunc.NTuples.Length; i++)
+            for (var i = 0; i < this.valueFunc.NTuples.Length; i++)
             {
-                foreach((var a, var n) in this.weightDeltaAbsSum[i].Zip(this.weightDeltaSum[i]))
+                foreach ((var a, var n) in this.weightDeltaAbsSum[i].Zip(this.weightDeltaSum[i]))
                 {
                     sum += Decay(WeightType.Abs(n / a));
                     count++;
@@ -169,27 +169,23 @@ namespace KalmiaZero.Learn
 
         void RunEpisode(double explorationRate)
         {
-            pastStatesBuffer.Clear();
-
             var game = new GameInfo(valueFunc.NTuples);
+            pastStatesBuffer.Clear();
+            pastStatesBuffer.Add(game.FeatureVector);
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
             int numMoves;
 
-            var lastMove = Move.Pass;
             var moveCount = 0;
             while (true)
             {
-                WeightType v = this.valueFunc.PredictWithBlackWeights(game.FeatureVector);
-                var vGrad = ValueFunction<WeightType>.CalcGradient(v);
-                pastStatesBuffer.Add(game.FeatureVector, vGrad);
-
                 if (game.Moves.Length == 0)  // pass
                 {
                     game.Pass();
-                    lastMove.Coord = BoardCoordinate.Pass;
+                    this.pastStatesBuffer.Add(game.FeatureVector);
                     continue;
                 }
 
+                WeightType v = this.valueFunc.PredictWithBlackWeights(game.FeatureVector);
                 WeightType nextV;
                 int moveIdx;
                 if (moveCount < this.CONFIG.NumInitialRandomMoves || Random.Shared.NextDouble() < explorationRate)   // random move
@@ -198,14 +194,13 @@ namespace KalmiaZero.Learn
                     game.Position.GenerateMove(ref move);
                     game.Update(ref move);
 
-                    if (game.Moves.Length == 0 && game.Position.IsGameOver) 
+                    if (game.Moves.Length == 0 && game.Position.IsGameOver)
                     {
-                        Finalize(ref move, v);
+                        Fit(GetReward(game.Position.DiscDiff) - v);
                         break;
                     }
 
-                    nextV = -this.valueFunc.PredictWithBlackWeights(game.FeatureVector);
-                    lastMove = move;
+                    nextV = WeightType.One - this.valueFunc.PredictWithBlackWeights(game.FeatureVector);
                 }
                 else    // greedy
                 {
@@ -213,16 +208,16 @@ namespace KalmiaZero.Learn
                     numMoves = game.Moves.Length;
 
                     moveIdx = 0;
-                    var minVRaw = WeightType.PositiveInfinity;
+                    var minVLogit = WeightType.PositiveInfinity;
                     for (var i = 0; i < numMoves; i++)
                     {
                         ref Move move = ref moves[i];
                         game.Position.GenerateMove(ref move);
                         game.Update(ref move);
-                        WeightType vRaw = this.valueFunc.PredictRawWithBlackWeights(game.FeatureVector);
-                        if (vRaw < minVRaw)
+                        WeightType vLogit = this.valueFunc.PredictLogitWithBlackWeights(game.FeatureVector);
+                        if (vLogit < minVLogit)
                         {
-                            minVRaw = vRaw;
+                            minVLogit = vLogit;
                             moveIdx = i;
                         }
                         game.Undo(ref move, moves[..numMoves]);
@@ -232,75 +227,50 @@ namespace KalmiaZero.Learn
 
                     if (game.Moves.Length == 0 && game.Position.IsGameOver) // terminal state
                     {
-                        Finalize(ref moves[moveIdx], v);
+                        Fit(GetReward(game.Position.DiscDiff) - v);
                         break;
                     }
 
-                    nextV = -WeightType.Tanh(minVRaw);
-                    lastMove = moves[moveIdx];
+                    nextV = WeightType.One - ValueFunction<WeightType>.StdSigmoid(minVLogit);
                 }
 
-                Adapt(this.CONFIG.DiscountRate * nextV - v);
+                Fit(this.CONFIG.DiscountRate * nextV - v);
+                this.pastStatesBuffer.Add(game.FeatureVector);
                 moveCount++;
             }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            void Finalize(ref Move move, WeightType v)
-            {
-                var reward = GetReward(game.Position.DiscDiff);
-                Adapt(-reward - v);
-
-                game.Undo(ref move);
-                if (lastMove.Coord != BoardCoordinate.Pass)
-                    game.Undo(ref lastMove);
-                else
-                    game.Pass();
-
-                FinalAdapt(game.FeatureVector, reward);
-            }
         }
 
-        unsafe void Adapt(WeightType tdError)
+        unsafe void Fit(WeightType tdError)
         {
             var alpha = this.CONFIG.LearningRate;
+            var beta = this.CONFIG.TCLFactor;
+            var eligibility = WeightType.One;
 
             fixed (WeightType* weights = this.valueFunc.Weights)
             {
-                var eligibility = WeightType.One;
-                foreach((var posFeatureVec, var vGrad) in this.pastStatesBuffer)
+                foreach (var posFeatureVec in this.pastStatesBuffer)
                 {
-                    var delta = eligibility * tdError * vGrad;
-                    ApplyGradients(posFeatureVec, weights, alpha, delta);
-                    tdError *= WeightType.NegativeOne;  // inverse tdError
+                    var delta = eligibility * tdError;
+                    if (posFeatureVec.SideToMove == DiscColor.Black)
+                        ApplyGradients<Black>(posFeatureVec, weights, alpha, beta, delta);
+                    else
+                        ApplyGradients<White>(posFeatureVec, weights, alpha, beta, delta);
+
+                    var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
+                    var lr = reg * alpha * Decay(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
+                    var db = lr * delta;
+                    this.valueFunc.Bias += db;
+                    this.biasDeltaSum += db;
+                    this.biasDeltaAbsSum += WeightType.Abs(db);
+
                     eligibility *= this.CONFIG.DiscountRate * this.CONFIG.EligibilityTraceFactor;
+                    tdError = this.CONFIG.DiscountRate - WeightType.One - tdError;  // inverse tdError: DiscountRate * (1.0 - nextV) - (1.0 - v)
                 }
             }
         }
 
-        unsafe void FinalAdapt(PositionFeatureVector posFeatureVec, WeightType reward)
-        {
-            var v = this.valueFunc.PredictWithBlackWeights(posFeatureVec);
-            var vGrad = ValueFunction<WeightType>.CalcGradient(v);
-            fixed (WeightType* weights = this.valueFunc.Weights)
-                ApplyGradients(posFeatureVec, weights, this.CONFIG.LearningRate, (reward - v) * vGrad);
-        }
-
-        unsafe void ApplyGradients(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType delta)
-        {
-            if (posFeatureVec.SideToMove == DiscColor.Black)
-                ApplyWeightGradients<Black>(posFeatureVec, weights, alpha, delta);
-            else
-                ApplyWeightGradients<White>(posFeatureVec, weights, alpha, delta);
-
-            var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
-            var lr = reg * alpha * Decay(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
-            var db = lr * delta;
-            this.valueFunc.Bias += db;
-            this.biasDeltaSum += db;
-            this.biasDeltaAbsSum += WeightType.Abs(db);
-        }
-
-        unsafe void ApplyWeightGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType delta) where DiscColor : IDiscColor
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        unsafe void ApplyGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType beta, WeightType delta) where DiscColor : IDiscColor
         {
             Debug.Assert(this.weightDeltaSum is not null);
             Debug.Assert(this.weightDeltaAbsSum is not null);
@@ -320,15 +290,14 @@ namespace KalmiaZero.Learn
                         var f = (typeof(DiscColor) == typeof(Black)) ? feature[j] : opp[feature[j]];
                         var mf = mirror[f];
 
-                        var lr = reg * Decay(WeightType.Abs(dwSum[i]) / dwAbsSum[i]);
+                        var lr = reg * alpha * Decay(WeightType.Abs(dwSum[i]) / dwAbsSum[i]);
                         var dw = lr * delta;
                         var absDW = WeightType.Abs(dw);
 
                         if (mf != f)
                         {
-                            var half = WeightType.One / (WeightType.One + WeightType.One);
-                            dw *= half;
-                            absDW *= half;
+                            dw *= WeightType.CreateChecked(0.5);
+                            absDW *= WeightType.CreateChecked(0.5);
                             w[mf] += dw;
                             dwSum[mf] += dw;
                             dwAbsSum[mf] += absDW;
@@ -347,41 +316,40 @@ namespace KalmiaZero.Learn
         static WeightType GetReward(int discDiff)
         {
             if (discDiff == 0)
-                return WeightType.Zero;
+                return WeightType.One / (WeightType.One + WeightType.One);
             else
-                return (discDiff > 0) ? WeightType.One : WeightType.NegativeOne;
+                return (discDiff > 0) ? WeightType.Zero : WeightType.One;
         }
 
-
-        class PastStatesBuffer : IEnumerable<(PositionFeatureVector posFeatureVec, WeightType vGrad)>
+        class PastStatesBuffer : IEnumerable<PositionFeatureVector>
         {
-            public int Capasity => this.items.Length;
+            public int Capasity => this.posFeatureVecs.Length;
             public int Count { get; private set; } = 0;
 
-            readonly (PositionFeatureVector posFeatureVec, WeightType vGrad)[] items;
+            readonly PositionFeatureVector[] posFeatureVecs;
             int loc = 0;
 
             public PastStatesBuffer(int capasity, NTuples nTuples)
-                => this.items = Enumerable.Range(0, capasity).Select(_ => (new PositionFeatureVector(nTuples), WeightType.Zero)).ToArray();
+            {
+                this.posFeatureVecs = Enumerable.Range(0, capasity).Select(_ => new PositionFeatureVector(nTuples)).ToArray();
+            }
 
             public void Clear() => this.loc = 0;
 
-            public void Add(PositionFeatureVector pfVec, WeightType vGrad) 
+            public void Add(PositionFeatureVector pfVec)
             {
-                ref var item = ref this.items[this.loc];
-                pfVec.CopyTo(item.posFeatureVec);
-                item.vGrad = vGrad;
+                pfVec.CopyTo(this.posFeatureVecs[this.loc]);
                 this.loc = (this.loc + 1) % this.Capasity;
                 this.Count = Math.Min(this.Count + 1, this.Capasity);
             }
 
-            public IEnumerator<(PositionFeatureVector posFeatureVec, WeightType vGrad)> GetEnumerator() => new Enumerator(this);
+            public IEnumerator<PositionFeatureVector> GetEnumerator() => new Enumerator(this);
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-            public class Enumerator : IEnumerator<(PositionFeatureVector posFeatureVec, WeightType vGrad)>
+            public class Enumerator : IEnumerator<PositionFeatureVector>
             {
-                public (PositionFeatureVector posFeatureVec, WeightType vGrad) Current { get; private set; }
+                public PositionFeatureVector Current { get; private set; }
 
                 object IEnumerator.Current => this.Current;
 
@@ -389,10 +357,11 @@ namespace KalmiaZero.Learn
                 int idx;
                 int moveCount;
 
-                public Enumerator(PastStatesBuffer pastStatesBuffer) 
+                public Enumerator(PastStatesBuffer pastStatesBuffer)
                 {
                     this.pastStatesBuffer = pastStatesBuffer;
                     Reset();
+                    Debug.Assert(this.Current is not null);
                 }
 
                 public void Dispose() { }
@@ -405,7 +374,7 @@ namespace KalmiaZero.Learn
                     var nextIdx = this.idx - 1;
                     if (nextIdx < 0)
                         nextIdx = this.pastStatesBuffer.Count - 1;
-                    this.Current = this.pastStatesBuffer.items[this.idx];
+                    this.Current = this.pastStatesBuffer.posFeatureVecs[this.idx];
                     this.idx = nextIdx;
                     this.moveCount++;
                     return true;
@@ -413,7 +382,7 @@ namespace KalmiaZero.Learn
 
                 public void Reset()
                 {
-                    this.Current = (PositionFeatureVector.Empty, default(WeightType));
+                    this.Current = PositionFeatureVector.Empty;
                     this.idx = this.pastStatesBuffer.loc - 1;
                     if (idx < 0)
                         this.idx = this.pastStatesBuffer.Count - 1;

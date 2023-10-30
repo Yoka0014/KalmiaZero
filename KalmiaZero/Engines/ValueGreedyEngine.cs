@@ -51,19 +51,19 @@ namespace KalmiaZero.Engines
             var pf = new PositionFeatureVector(this.posFeatureVec);
             Span<Move> legalMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
             Span<double> values = stackalloc double[nextMoves.Length];
-            for(var i = 0; i < numNextMoves; i++)
+            for (var i = 0; i < numNextMoves; i++)
             {
                 this.posFeatureVec.CopyTo(pf);
                 pos.GenerateMove(ref nextMoves[i]);
                 pos.Update(ref nextMoves[i]);
                 var numMoves = pos.GetNextMoves(ref legalMoves);
                 pf.Update(ref nextMoves[i], legalMoves[..numMoves]);
-                values[i] = 1.0 - this.valueFunc.PredictWinRate(pf);
+                values[i] = 1.0 - this.valueFunc.Predict(pf);
                 pos.Undo(ref nextMoves[i]);
             }
 
             var multiPV = new MultiPV();
-            for(var i = 0; i < numNextMoves; i++)
+            for (var i = 0; i < numNextMoves; i++)
             {
                 multiPV.Add(new MultiPVItem(new BoardCoordinate[1] { nextMoves[i].Coord })
                 {
