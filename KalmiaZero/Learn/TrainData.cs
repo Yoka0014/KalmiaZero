@@ -2,132 +2,67 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Text.RegularExpressions;
 
 using KalmiaZero.Utils;
-using KalmiaZero.Reversi;
 using KalmiaZero.GameFormats;
+using KalmiaZero.Reversi;
 
 namespace KalmiaZero.Learn
 {
-    public struct TrainDataItem
+    using static Reversi.Constants;
+
+    public readonly struct TrainData
     {
-        public Bitboard Position { get; set; }
-        public BoardCoordinate NextMove { get; set; }  
-        public sbyte FinalDiscDiff { get; set; }
-        public float EvalScore { get; set; }
+        public readonly Position RootPos { get; }
+        public readonly sbyte ScoreFromBlack { get; }
+        public readonly sbyte TheoreticalScoreFromBlack { get; }
+        public readonly sbyte TheoreticalScoreDepth { get; }
+        public readonly Move[] Moves { get; }
 
-        public TrainDataItem(Stream stream, bool swapBytes)
+        public TrainData(WTHORHeader wtbHeader, WTHORGameRecord game)
         {
-            const int BUFFER_SIZE = 8;
-            Span<byte> buffer = stackalloc byte[BUFFER_SIZE];
-
-            stream.Read(buffer[..sizeof(ulong)], swapBytes);
-            var player = BitConverter.ToUInt64(buffer);
-
-            stream.Read(buffer[..sizeof(ulong)], swapBytes);
-            var opponent = BitConverter.ToUInt64(buffer);
-
-            this.Position = new Bitboard(player, opponent);
-
-            this.NextMove = (BoardCoordinate)stream.ReadByte();
-            this.FinalDiscDiff = (sbyte)stream.ReadByte();
-
-            stream.Read(buffer[..sizeof(float)], swapBytes);
-            this.EvalScore = BitConverter.ToSingle(buffer);
+            this.TheoreticalScoreDepth = (sbyte)wtbHeader.Depth;
+            this.RootPos = new Position();
+            this.Moves = game.MoveRecord.Append(Move.Pass).ToArray();
+            var finalDiscCount = this.Moves.Count(move => move.Coord != BoardCoordinate.Pass) + 4;
+            this.ScoreFromBlack = (sbyte)(game.BlackDiscCount * 2 - finalDiscCount);
+            this.TheoreticalScoreFromBlack = (sbyte)(game.BestBlackDiscCount * 2 - (NUM_SQUARES - wtbHeader.Depth));
         }
 
-        public readonly void WriteTo(Stream stream)
+        public readonly int GetScoreForm(DiscColor color)
         {
-            stream.Write(BitConverter.GetBytes(this.Position.Player));
-            stream.Write(BitConverter.GetBytes(this.Position.Opponent));
-            stream.WriteByte((byte)this.NextMove);
-            stream.WriteByte((byte)this.FinalDiscDiff);
-            stream.Write(BitConverter.GetBytes(this.EvalScore));
-        }
-    }
+            if (color == DiscColor.Null)
+                throw new ArgumentException($"{nameof(color)} cannot be {DiscColor.Null}");
 
-    public static class TrainData
-    {
-        const string LABEL = "KalmiaZero";
-        const string LABEL_INVERSED = "oreZaimlaK";
-        const int LABEL_SIZE = 10;
-
-        public static TrainDataItem[] LoadFromFile(string filePath)
-        {
-            Span<byte> buffer = stackalloc byte[LABEL_SIZE];
-            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-            fs.Read(buffer);
-            var label = Encoding.ASCII.GetString(buffer);
-            var swapBytes = label != LABEL;
-
-            if(swapBytes && label != LABEL_INVERSED)
-                throw new InvalidDataException($"The format of \"{filePath}\" is invalid.");
-
-            fs.Read(buffer[..sizeof(int)], swapBytes);
-            var numData = BitConverter.ToInt32(buffer);
-            return (from _ in Enumerable.Range(0, numData) select new TrainDataItem(fs, swapBytes)).ToArray();
+            return (color == DiscColor.Black) ? this.ScoreFromBlack : -this.ScoreFromBlack;
         }
 
-        public static void WriteToFile(this IEnumerable<TrainDataItem> trainData, string filePath)
+        public readonly int GetTheoreticalScoreForm(DiscColor color)
         {
-            using var fs = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.Write);
-            fs.Write(Encoding.ASCII.GetBytes(LABEL)); 
-            fs.Write(BitConverter.GetBytes(trainData.Count()));
-            foreach (var item in trainData)
-                item.WriteTo(fs);
+            if (color == DiscColor.Null)
+                throw new ArgumentException($"{nameof(color)} cannot be {DiscColor.Null}");
+
+            return (color == DiscColor.Black) ? this.TheoreticalScoreFromBlack : -this.TheoreticalScoreFromBlack;
         }
 
-        public static TrainDataItem[][] CreateTrainDataFromWthorFile(string dir, string jouFileName, string trnFileName, double testGameRate = 0.1)
+        public static (TrainData[] trainData, TrainData[] testData) CreateTrainDataFromWTHORFiles(string dir, string jouFileName, string trnFileName, double testSize=0.1)
         {
+            var allData = new List<TrainData>();
             var jouPath = Path.Combine(dir, jouFileName);
             var trnPath = Path.Combine(dir, trnFileName);
-            var gameRecords = new List<(WTHORGameRecord game, int depth)>();
-
-            foreach (var file in Directory.GetFiles(dir))
+            foreach(var wtbPath in Directory.GetFiles(dir, "*.wtb"))
             {
-                Console.WriteLine(file);
-                if (Path.GetExtension(file) != ".wtb")
-                    continue;
-
-                var wthor = new WTHORFile(jouPath, trnPath, file);
-                gameRecords.AddRange(wthor.GameRecords.Zip(Enumerable.Repeat(wthor.WtbHeader.Depth, wthor.GameRecords.Count)));
+                var wthor = new WTHORFile(jouPath, trnPath, wtbPath);
+                foreach (var game in wthor.GameRecords)
+                    allData.Add(new TrainData(wthor.WtbHeader, game));
             }
 
-            Random.Shared.Shuffle(gameRecords);
-            var numTestGames = (int)(gameRecords.Count * testGameRate);
-
-            var testData = new List<TrainDataItem>();
-            for (var i = 0; i < numTestGames; i++)
-                addPositions(testData, gameRecords[i].game, gameRecords[i].depth);
-
-            var trainData = new List<TrainDataItem>();
-            for (var i = numTestGames; i < gameRecords.Count; i++)
-                addPositions(trainData, gameRecords[i].game, gameRecords[i].depth);
-            Random.Shared.Shuffle(trainData);
-
-            return new TrainDataItem[][] { trainData.ToArray(), testData.ToArray() };
-
-            static void addPositions(List<TrainDataItem> trainData, WTHORGameRecord game, int depth)
-            {
-                var pos = new Position();
-                for (var i = 0; i < game.MoveRecord.Count; i++)
-                {
-                    var move = game.MoveRecord[i];
-                    var item = new TrainDataItem
-                    {
-                        Position = pos.GetBitboard(),
-                        NextMove = move.Coord
-                    };
-
-                    var discDiff = (pos.EmptySquareCount >= depth) ? game.BestBlackDiscCount : game.BlackDiscCount;
-                    discDiff = 2 * discDiff - Constants.NUM_SQUARES;
-                    item.FinalDiscDiff = (pos.SideToMove == DiscColor.Black) ? (sbyte)discDiff : (sbyte)(-discDiff);
-                    item.EvalScore = float.NaN;
-                    trainData.Add(item);
-                    pos.Update(ref move);
-                }
-            }
+            Random.Shared.Shuffle(allData);
+            var numTestData = (int)(allData.Count * testSize);
+            var trainData = allData.Take(allData.Count - numTestData).ToArray();
+            var testData = allData.Skip(trainData.Length).Take(numTestData).ToArray();
+            return (trainData, testData);
         }
     }
 }

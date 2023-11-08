@@ -144,7 +144,7 @@ namespace KalmiaZero.Learn
         void WriteParams(StringBuilder sb, double explorationRate)
         {
             sb.Append($"ExplorationRate: ").Append(explorationRate).Append('\n');
-            sb.Append($"LearningRate(mean): ").Append(CalcAverageLearningRate()).Append('\n');
+            sb.Append($"LearningRateMean: ").Append(CalcAverageLearningRate()).Append('\n');
         }
 
         WeightType CalcAverageLearningRate()

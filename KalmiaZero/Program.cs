@@ -1,6 +1,7 @@
 ﻿//#define ENGINE
+#define SL
 //#define RL
-#define MULTI_RL
+//#define MULTI_RL
 
 using System;
 
@@ -29,6 +30,15 @@ namespace KalmiaZero
             nboard.Mainloop(engine);
 #endif
 
+#if SL
+            var sw = new Stopwatch();
+            var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
+            valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
+            var slTrainer = new SupervisedTrainer<float>("AG01", valueFunc, new SupervisedTrainerConfig<float>());
+            (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN");
+            slTrainer.Train(trainData, testData);
+#endif
+
 #if RL
             var sw = new Stopwatch();
             var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
@@ -44,7 +54,7 @@ namespace KalmiaZero
             var sw = new Stopwatch();
             sw.Start();
             TDTrainer<float>.TrainMultipleAgents(Environment.CurrentDirectory,
-                new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 20, 7, 100);
+                new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 24, 7, 100);
             sw.Stop();
             Console.WriteLine(sw.ElapsedMilliseconds);
 #endif

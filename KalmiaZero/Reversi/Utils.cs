@@ -5,9 +5,9 @@ namespace KalmiaZero.Reversi
 {
     using static Constants;
 
-    internal interface IDiscColor { }
-    internal struct Black : IDiscColor { }
-    internal struct White : IDiscColor { }
+    public interface IDiscColor { }
+    public struct Black : IDiscColor { }
+    public struct White : IDiscColor { }
 
     public static class Utils
     {
