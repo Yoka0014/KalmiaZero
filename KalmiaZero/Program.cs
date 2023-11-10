@@ -36,7 +36,10 @@ namespace KalmiaZero
             valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
             var slTrainer = new SupervisedTrainer<float>("AG01", valueFunc, new SupervisedTrainerConfig<float>());
             (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN");
+            sw.Start();
             slTrainer.Train(trainData, testData);
+            sw.Stop();
+            Console.WriteLine(sw.ElapsedMilliseconds);
 #endif
 
 #if RL

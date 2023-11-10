@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -18,15 +17,15 @@ namespace KalmiaZero.Learn
 
     public record class SupervisedTrainerConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
-        public int NumEpoch { get; init; } = 100;
+        public int NumEpoch { get; init; } = 200;
         public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.01);
         public WeightType Epsilon { get; init; } = WeightType.CreateChecked(1.0e-7);
         public int Pacience { get; init; } = 0;
 
         public string WorkDir { get; init; } = Environment.CurrentDirectory;
         public string WeightsFileName { get; init; } = "value_func_weights_sl";
-        public string LossHistroyFileName { get; init; } = "loss_histroy.txt";
-        public int SaveWeightsInterval { get; init; } = 10000;
+        public string LossHistroyFileName { get; init; } = "loss_histroy";
+        public int SaveWeightsInterval { get; init; } = 10;
         public bool SaveOnlyLatestWeights = true;
     }
 
@@ -40,9 +39,9 @@ namespace KalmiaZero.Learn
 
         readonly PositionFeatureVector featureVec;
         readonly ValueFunction<WeightType> valueFunc;
-        WeightType[] weightGrads;
+        readonly WeightType[] weightGrads;
         WeightType biasGrad;
-        WeightType[] weightGradSquareSums;
+        readonly WeightType[] weightGradSquareSums;
         WeightType biasGradSquareSum;
         WeightType prevTrainLoss;
         WeightType prevTestLoss;
@@ -57,7 +56,7 @@ namespace KalmiaZero.Learn
             this.Label = label;
             this.CONFIG = config;
             this.WEIGHTS_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.WeightsFileName}_{"{0}"}.bin");
-            this.LOSS_HISTORY_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.LossHistroyFileName}_{"{0}"}.bin");
+            this.LOSS_HISTORY_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.LossHistroyFileName}.txt");
             this.valueFunc = valueFunc;
             this.featureVec = new PositionFeatureVector(this.valueFunc.NTuples);
 
@@ -76,22 +75,18 @@ namespace KalmiaZero.Learn
 
             WriteLabel();
             this.logger.AppendLine("Start learning.\n");
-            this.logger.Append("LearningRateMean: ").Append(CalcAverageLearingRate()).Append('\n'); 
             Console.WriteLine(this.logger.ToString());
             this.logger.Clear();
 
-            var stopFlag = false;
-            for(var epoch = 0; epoch < this.CONFIG.NumEpoch || stopFlag; epoch++)
+            var continueFlag = true;
+            for(var epoch = 0; epoch < this.CONFIG.NumEpoch && continueFlag; epoch++)
             {
-                stopFlag = ExecuteOneEpoch(trainData, testData);
                 WriteLabel();
+                continueFlag = ExecuteOneEpoch(trainData, testData);
                 this.logger.Append("Epoch ").Append(epoch).AppendLine(" has done.");
 
-                if((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0 || stopFlag)
+                if((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0 || !continueFlag)
                     SaveWeights(epoch);
-
-                if(!stopFlag)
-                    this.logger.Append("LearningRateMean: ").Append(CalcAverageLearingRate()).Append('\n');
 
                 Console.WriteLine(this.logger.ToString());
                 this.logger.Clear();
@@ -104,14 +99,7 @@ namespace KalmiaZero.Learn
                 this.logger.AppendLine($"[{this.Label}]");
         }
 
-        WeightType CalcAverageLearingRate()
-        {
-            var sum = this.weightGradSquareSums.Aggregate((s, x) => s + CalcAdaFactor(x));
-            sum += CalcAdaFactor(this.biasGradSquareSum);
-            return this.CONFIG.LearningRate * sum / WeightType.CreateChecked(this.weightGradSquareSums.Length + 1);
-        }
-
-        static WeightType CalcAdaFactor(WeightType x) => WeightType.One / WeightType.Sqrt(x + WeightType.Epsilon);
+        static WeightType CalcAdaFactor(WeightType x) => WeightType.One / (WeightType.Sqrt(x) + WeightType.Epsilon);
 
         bool ExecuteOneEpoch(TrainData[] trainData, TrainData[] testData)
         {
@@ -196,25 +184,33 @@ namespace KalmiaZero.Learn
                     for (var j = 0; j < data.Moves.Length; j++)
                     {
                         var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
-                        var value = this.valueFunc.Predict(this.featureVec);
+                        var value = this.valueFunc.PredictWithBlackWeights(this.featureVec);
                         var delta = value - reward;
                         loss += LossFunctions.BinaryCrossEntropy(value, reward);
                         count++;
 
-                        calcGrads(w, wg, wg2, delta);
-
-                        if (NUM_SQUARE_STATES == 4)
-                                    numMoves = pos.GetNextMoves(ref moves);
+                        if (pos.SideToMove == DiscColor.Black)
+                            calcGrads<Black>(w, wg, wg2, delta);
+                        else
+                            calcGrads<White>(w, wg, wg2, delta);
 
                         ref var nextMove = ref data.Moves[j];
                         if (nextMove.Coord != BoardCoordinate.Pass)
                         {
                             pos.Update(ref nextMove);
+
+                            if (NUM_SQUARE_STATES == 4)
+                                numMoves = pos.GetNextMoves(ref moves);
+
                             this.featureVec.Update(ref nextMove, moves[..numMoves]);
                         }
                         else
                         {
                             pos.Pass();
+
+                            if (NUM_SQUARE_STATES == 4)
+                                numMoves = pos.GetNextMoves(ref moves);
+
                             this.featureVec.Pass(moves[..numMoves]);
                         }
                     }
@@ -224,16 +220,17 @@ namespace KalmiaZero.Learn
             return loss / WeightType.CreateChecked(count);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            unsafe void calcGrads(WeightType* w, WeightType* wg, WeightType* wg2, WeightType delta)
+            unsafe void calcGrads<DiscColor>(WeightType* w, WeightType* wg, WeightType* wg2, WeightType delta) where DiscColor : struct, IDiscColor
             {
                 for (var nTupleID = 0; nTupleID < this.featureVec.NTuples.Length; nTupleID++)
                 {
                     ref Feature feature = ref this.featureVec.GetFeature(nTupleID);
+                    fixed (FeatureType* opp = this.valueFunc.NTuples.GetOpponentFeatureRawTable(nTupleID))
                     fixed (FeatureType* mirror = this.featureVec.NTuples.GetMirroredFeatureRawTable(nTupleID))
                     {
                         for (var k = 0; k < feature.Length; k++)
                         {
-                            var f = feature[k];
+                            var f = (typeof(DiscColor) == typeof(Black)) ? feature[k] : opp[feature[k]];
                             wg[f] += delta;
                             wg[mirror[f]] += delta;
                         }
@@ -255,12 +252,12 @@ namespace KalmiaZero.Learn
                 {
                     var g = wg[i];
                     wg2[i] += g * g;
-                    w[i] -= eta * g / WeightType.Sqrt(wg2[i] + WeightType.Epsilon);
+                    w[i] -= eta * CalcAdaFactor(wg2[i]) * g;
                 }
             }
 
             this.biasGradSquareSum += this.biasGrad * this.biasGrad;
-            this.valueFunc.Bias -= eta * this.biasGrad / WeightType.Sqrt(this.biasGradSquareSum + WeightType.Epsilon);
+            this.valueFunc.Bias -= eta * CalcAdaFactor(this.biasGradSquareSum) * this.biasGrad;
         }
 
         WeightType CalculateLoss(TrainData[] testData)
@@ -282,21 +279,26 @@ namespace KalmiaZero.Learn
                 for(var j = 0; j < data.Moves.Length; j++)
                 {
                     var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
-                    loss += LossFunctions.BinaryCrossEntropy(this.valueFunc.Predict(this.featureVec), reward);
+                    loss += LossFunctions.BinaryCrossEntropy(this.valueFunc.PredictWithBlackWeights(this.featureVec), reward);
                     count++;
-
-                    if(NUM_SQUARE_STATES == 4)
-                        numMoves = pos.GetNextMoves(ref moves);
 
                     ref var move = ref data.Moves[j];
                     if (move.Coord != BoardCoordinate.Pass)
                     {
                         pos.Update(ref move);
+
+                        if (NUM_SQUARE_STATES == 4)
+                            numMoves = pos.GetNextMoves(ref moves);
+
                         this.featureVec.Update(ref move, moves[..numMoves]);
                     }
                     else
                     {
                         pos.Pass();
+
+                        if (NUM_SQUARE_STATES == 4)
+                            numMoves = pos.GetNextMoves(ref moves);
+
                         this.featureVec.Pass(moves[..numMoves]);
                     }
                 }
