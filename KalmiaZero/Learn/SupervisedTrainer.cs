@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -19,14 +18,14 @@ namespace KalmiaZero.Learn
     public record class SupervisedTrainerConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         public int NumEpoch { get; init; } = 200;
-        public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.0001);
+        public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.1);
         public WeightType Epsilon { get; init; } = WeightType.CreateChecked(1.0e-7);
         public int Pacience { get; init; } = 0;
 
         public string WorkDir { get; init; } = Environment.CurrentDirectory;
         public string WeightsFileName { get; init; } = "value_func_weights_sl";
         public string LossHistroyFileName { get; init; } = "loss_histroy";
-        public int SaveWeightsInterval { get; init; } = 10;
+        public int SaveWeightsInterval { get; init; } = 1;
         public bool SaveOnlyLatestWeights = true;
     }
 
@@ -62,7 +61,7 @@ namespace KalmiaZero.Learn
             this.featureVec = new PositionFeatureVector(this.valueFunc.NTuples);
 
             var weights = this.valueFunc.Weights;
-            this.weightGrads = new WeightType[weights.Length];  
+            this.weightGrads = new WeightType[weights.Length];
             this.weightGradSquareSums = new WeightType[weights.Length];
         }
 
@@ -80,13 +79,13 @@ namespace KalmiaZero.Learn
             this.logger.Clear();
 
             var continueFlag = true;
-            for(var epoch = 0; epoch < this.CONFIG.NumEpoch && continueFlag; epoch++)
+            for (var epoch = 0; epoch < this.CONFIG.NumEpoch && continueFlag; epoch++)
             {
                 continueFlag = ExecuteOneEpoch(trainData, testData);
                 WriteLabel();
                 this.logger.Append("Epoch ").Append(epoch).AppendLine(" has done.");
 
-                if((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0)
+                if ((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0)
                     SaveWeights(epoch);
 
                 Console.WriteLine(this.logger.ToString());
@@ -101,7 +100,7 @@ namespace KalmiaZero.Learn
                 this.logger.AppendLine($"[{this.Label}]");
         }
 
-        static WeightType CalcAdaFactor(WeightType x) => WeightType.One / (WeightType.Sqrt(x) + WeightType.Epsilon);
+        static WeightType CalcAdaFactor(WeightType x) => WeightType.One / (WeightType.Sqrt(x + WeightType.Epsilon));
 
         bool ExecuteOneEpoch(TrainData[] trainData, TrainData[] testData)
         {
@@ -142,7 +141,7 @@ namespace KalmiaZero.Learn
             this.lossHistory.Add((trainLoss, testLoss));
 
             var trainLossDiff = trainLoss - prevTrainLoss;
-            if(WeightType.Abs(trainLossDiff) < this.CONFIG.Epsilon)
+            if (WeightType.Abs(trainLossDiff) < this.CONFIG.Epsilon)
             {
                 this.logger.AppendLine("converged.");
                 Console.WriteLine(this.logger);
@@ -163,8 +162,8 @@ namespace KalmiaZero.Learn
             this.valueFunc.SaveToFile(path);
 
             var trainLossSb = new StringBuilder("[");
-            var testLossSb = new StringBuilder("[");    
-            foreach((var trainLoss, var testLoss) in this.lossHistory)
+            var testLossSb = new StringBuilder("[");
+            foreach ((var trainLoss, var testLoss) in this.lossHistory)
             {
                 trainLossSb.Append(trainLoss).Append(", ");
                 testLossSb.Append(testLoss).Append(", ");
@@ -188,6 +187,7 @@ namespace KalmiaZero.Learn
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
 
+            fixed(int* nTupleOffset = this.valueFunc.NTupleOffset)
             fixed (WeightType* w = this.valueFunc.Weights)
             fixed (WeightType* wg2 = this.weightGradSquareSums)
             {
@@ -205,9 +205,9 @@ namespace KalmiaZero.Learn
                     var delta = value - reward;
 
                     if (pos.SideToMove == DiscColor.Black)
-                        calcAndApplyGrads<Black>(w, wg2, delta);
+                        calcAndApplyGrads<Black>(nTupleOffset, w, wg2, delta);
                     else
-                        calcAndApplyGrads<White>(w, wg2, delta);
+                        calcAndApplyGrads<White>(nTupleOffset, w, wg2, delta);
 
                     ref var nextMove = ref trainData.Moves[i];
                     if (nextMove.Coord != BoardCoordinate.Pass)
@@ -232,11 +232,14 @@ namespace KalmiaZero.Learn
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            unsafe void calcAndApplyGrads<DiscColor>(WeightType* w, WeightType* wg2, WeightType delta) where DiscColor : struct, IDiscColor
+            unsafe void calcAndApplyGrads<DiscColor>(int* ntupleOffset, WeightType* weights, WeightType* squareWGs, WeightType delta) where DiscColor : struct, IDiscColor
             {
                 var squareDelta = delta * delta;
                 for (var nTupleID = 0; nTupleID < this.featureVec.NTuples.Length; nTupleID++)
                 {
+                    var offset = ntupleOffset[nTupleID];
+                    var w = weights + offset;
+                    var wg2 = squareWGs + offset;
                     ref Feature feature = ref this.featureVec.GetFeature(nTupleID);
                     fixed (FeatureType* opp = this.valueFunc.NTuples.GetOpponentFeatureRawTable(nTupleID))
                     fixed (FeatureType* mirror = this.featureVec.NTuples.GetMirroredFeatureRawTable(nTupleID))
@@ -266,7 +269,7 @@ namespace KalmiaZero.Learn
             var count = 0;
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
-            for(var i = 0; i < traindata.Length; i++)
+            for (var i = 0; i < traindata.Length; i++)
             {
                 ref var data = ref traindata[i];
                 var pos = data.RootPos;
@@ -276,7 +279,7 @@ namespace KalmiaZero.Learn
 
                 this.featureVec.Init(ref pos, moves[..numMoves]);
 
-                for(var j = 0; j < data.Moves.Length; j++)
+                for (var j = 0; j < data.Moves.Length; j++)
                 {
                     var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
                     loss += LossFunctions.BinaryCrossEntropy(this.valueFunc.PredictWithBlackWeights(this.featureVec), reward);
