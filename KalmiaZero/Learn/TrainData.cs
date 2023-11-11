@@ -26,8 +26,8 @@ namespace KalmiaZero.Learn
             this.RootPos = new Position();
             this.Moves = game.MoveRecord.Append(Move.Pass).ToArray();
             var finalDiscCount = this.Moves.Count(move => move.Coord != BoardCoordinate.Pass) + 4;
-            this.ScoreFromBlack = (sbyte)(game.BlackDiscCount * 2 - finalDiscCount);
-            this.TheoreticalScoreFromBlack = (sbyte)(game.BestBlackDiscCount * 2 - (NUM_SQUARES - wtbHeader.Depth));
+            this.ScoreFromBlack = (sbyte)(game.BlackDiscCount * 2 - NUM_SQUARES);
+            this.TheoreticalScoreFromBlack = (sbyte)(game.BestBlackDiscCount * 2 - NUM_SQUARES);
         }
 
         public readonly int GetScoreForm(DiscColor color)

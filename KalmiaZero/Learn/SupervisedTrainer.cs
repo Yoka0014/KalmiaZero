@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -18,7 +19,7 @@ namespace KalmiaZero.Learn
     public record class SupervisedTrainerConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         public int NumEpoch { get; init; } = 200;
-        public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.01);
+        public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.0001);
         public WeightType Epsilon { get; init; } = WeightType.CreateChecked(1.0e-7);
         public int Pacience { get; init; } = 0;
 
@@ -81,16 +82,17 @@ namespace KalmiaZero.Learn
             var continueFlag = true;
             for(var epoch = 0; epoch < this.CONFIG.NumEpoch && continueFlag; epoch++)
             {
-                WriteLabel();
                 continueFlag = ExecuteOneEpoch(trainData, testData);
+                WriteLabel();
                 this.logger.Append("Epoch ").Append(epoch).AppendLine(" has done.");
 
-                if((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0 || !continueFlag)
+                if((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0)
                     SaveWeights(epoch);
 
                 Console.WriteLine(this.logger.ToString());
                 this.logger.Clear();
             }
+            SaveWeights(this.CONFIG.NumEpoch);
         }
 
         void WriteLabel()
@@ -106,18 +108,35 @@ namespace KalmiaZero.Learn
             Array.Clear(this.weightGrads);
             this.biasGrad = WeightType.Zero;
 
-            var testLoss = CalculateLoss(testData);
+            var interval = trainData.Length / 10;
+            for (var i = 0; i < trainData.Length; i++)
+            {
+                LearnFrom(ref trainData[i]);
+                if ((i + 1) % interval == 0)
+                {
+                    WriteLabel();
+                    this.logger.Append("Learned ").Append((i + 1) * 10.0 / interval).AppendLine("% of training data.");
+                    Console.WriteLine(this.logger);
+                    this.logger.Clear();
+                }
+            }
 
+            WriteLabel();
+            var testLoss = CalculateLoss(testData);
             this.logger.Append("test loss: ").Append(testLoss).Append('\n');
 
             var testLossDiff = testLoss - prevTestLoss;
-            if(testLossDiff > this.CONFIG.Epsilon && ++this.overfittingCount > this.CONFIG.Pacience)
+            if (testLossDiff > this.CONFIG.Epsilon && ++this.overfittingCount > this.CONFIG.Pacience)
             {
                 this.logger.AppendLine("early stopping.");
+                Console.WriteLine(this.logger);
+                this.logger.Clear();
                 return false;
             }
+            else
+                this.overfittingCount = 0;
 
-            var trainLoss = CalculateGradients(trainData);
+            var trainLoss = CalculateLoss(trainData);
             this.logger.Append("train loss: ").Append(trainLoss).Append('\n');
 
             this.lossHistory.Add((trainLoss, testLoss));
@@ -126,10 +145,13 @@ namespace KalmiaZero.Learn
             if(WeightType.Abs(trainLossDiff) < this.CONFIG.Epsilon)
             {
                 this.logger.AppendLine("converged.");
+                Console.WriteLine(this.logger);
+                this.logger.Clear();
                 return false;
             }
 
-            ApplyGradients();
+            Console.WriteLine(this.logger);
+            this.logger.Clear();
 
             return true;
         }
@@ -160,68 +182,59 @@ namespace KalmiaZero.Learn
             sw.WriteLine(testLossSb.ToString());
         }
 
-        unsafe WeightType CalculateGradients(TrainData[] trainData)
+        unsafe void LearnFrom(ref TrainData trainData)
         {
-            var loss = WeightType.Zero;
-            var count = 0;
+            var eta = this.CONFIG.LearningRate;
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
 
             fixed (WeightType* w = this.valueFunc.Weights)
-            fixed (WeightType* wg = this.weightGrads)
             fixed (WeightType* wg2 = this.weightGradSquareSums)
             {
-                for (var i = 0; i < trainData.Length; i++)
+                var pos = trainData.RootPos;
+
+                if (NUM_SQUARE_STATES == 4)
+                    numMoves = pos.GetNextMoves(ref moves);
+
+                this.featureVec.Init(ref pos, moves[..numMoves]);
+
+                for (var i = 0; i < trainData.Moves.Length; i++)
                 {
-                    ref var data = ref trainData[i];
-                    var pos = data.RootPos;
+                    var reward = GetReward(ref trainData, pos.SideToMove, pos.EmptySquareCount);
+                    var value = this.valueFunc.PredictWithBlackWeights(this.featureVec);
+                    var delta = value - reward;
 
-                    if (NUM_SQUARE_STATES == 4)
-                        numMoves = pos.GetNextMoves(ref moves);
+                    if (pos.SideToMove == DiscColor.Black)
+                        calcAndApplyGrads<Black>(w, wg2, delta);
+                    else
+                        calcAndApplyGrads<White>(w, wg2, delta);
 
-                    this.featureVec.Init(ref pos, moves[..numMoves]);
-
-                    for (var j = 0; j < data.Moves.Length; j++)
+                    ref var nextMove = ref trainData.Moves[i];
+                    if (nextMove.Coord != BoardCoordinate.Pass)
                     {
-                        var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
-                        var value = this.valueFunc.PredictWithBlackWeights(this.featureVec);
-                        var delta = value - reward;
-                        loss += LossFunctions.BinaryCrossEntropy(value, reward);
-                        count++;
+                        pos.Update(ref nextMove);
 
-                        if (pos.SideToMove == DiscColor.Black)
-                            calcGrads<Black>(w, wg, wg2, delta);
-                        else
-                            calcGrads<White>(w, wg, wg2, delta);
+                        if (NUM_SQUARE_STATES == 4)
+                            numMoves = pos.GetNextMoves(ref moves);
 
-                        ref var nextMove = ref data.Moves[j];
-                        if (nextMove.Coord != BoardCoordinate.Pass)
-                        {
-                            pos.Update(ref nextMove);
+                        this.featureVec.Update(ref nextMove, moves[..numMoves]);
+                    }
+                    else
+                    {
+                        pos.Pass();
 
-                            if (NUM_SQUARE_STATES == 4)
-                                numMoves = pos.GetNextMoves(ref moves);
+                        if (NUM_SQUARE_STATES == 4)
+                            numMoves = pos.GetNextMoves(ref moves);
 
-                            this.featureVec.Update(ref nextMove, moves[..numMoves]);
-                        }
-                        else
-                        {
-                            pos.Pass();
-
-                            if (NUM_SQUARE_STATES == 4)
-                                numMoves = pos.GetNextMoves(ref moves);
-
-                            this.featureVec.Pass(moves[..numMoves]);
-                        }
+                        this.featureVec.Pass(moves[..numMoves]);
                     }
                 }
             }
 
-            return loss / WeightType.CreateChecked(count);
-
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            unsafe void calcGrads<DiscColor>(WeightType* w, WeightType* wg, WeightType* wg2, WeightType delta) where DiscColor : struct, IDiscColor
+            unsafe void calcAndApplyGrads<DiscColor>(WeightType* w, WeightType* wg2, WeightType delta) where DiscColor : struct, IDiscColor
             {
+                var squareDelta = delta * delta;
                 for (var nTupleID = 0; nTupleID < this.featureVec.NTuples.Length; nTupleID++)
                 {
                     ref Feature feature = ref this.featureVec.GetFeature(nTupleID);
@@ -231,44 +244,31 @@ namespace KalmiaZero.Learn
                         for (var k = 0; k < feature.Length; k++)
                         {
                             var f = (typeof(DiscColor) == typeof(Black)) ? feature[k] : opp[feature[k]];
-                            wg[f] += delta;
-                            wg[mirror[f]] += delta;
+                            var mf = mirror[f];
+                            wg2[f] += squareDelta;
+                            wg2[mf] += squareDelta;
+
+                            var dw = -eta * CalcAdaFactor(wg2[f]) * delta;
+                            w[f] += dw;
+                            w[mf] += dw;
                         }
                     }
                 }
-                this.biasGrad += delta;
+
+                this.biasGradSquareSum += squareDelta;
+                this.valueFunc.Bias -= eta * CalcAdaFactor(this.biasGradSquareSum) * delta;
             }
         }
 
-        unsafe void ApplyGradients()
-        {
-            var eta = this.CONFIG.LearningRate;
-
-            fixed(WeightType* w = this.valueFunc.Weights)
-            fixed(WeightType* wg = this.weightGrads)
-            fixed(WeightType* wg2 = this.weightGradSquareSums)
-            {
-                for(var i = 0; i < this.valueFunc.Weights.Length; i++)
-                {
-                    var g = wg[i];
-                    wg2[i] += g * g;
-                    w[i] -= eta * CalcAdaFactor(wg2[i]) * g;
-                }
-            }
-
-            this.biasGradSquareSum += this.biasGrad * this.biasGrad;
-            this.valueFunc.Bias -= eta * CalcAdaFactor(this.biasGradSquareSum) * this.biasGrad;
-        }
-
-        WeightType CalculateLoss(TrainData[] testData)
+        WeightType CalculateLoss(TrainData[] traindata)
         {
             var loss = WeightType.Zero;
             var count = 0;
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
-            for(var i = 0; i < testData.Length; i++)
+            for(var i = 0; i < traindata.Length; i++)
             {
-                ref var data = ref testData[i];
+                ref var data = ref traindata[i];
                 var pos = data.RootPos;
 
                 if (NUM_SQUARE_STATES == 4)
