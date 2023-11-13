@@ -17,6 +17,7 @@ using KalmiaZero.Learn;
 using KalmiaZero.Search;
 using KalmiaZero.NTuple;
 using System.Diagnostics;
+using System.Linq;
 
 namespace KalmiaZero
 {
@@ -32,8 +33,13 @@ namespace KalmiaZero
 
 #if SL
             var sw = new Stopwatch();
-            var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
-            valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
+            var nTupleInfos = Enumerable.Range(0, 1).Select(_ => new NTupleInfo(7)).ToArray();
+
+            foreach(var nTuple in nTupleInfos)
+                Console.WriteLine(nTuple);
+
+            var nTuples = new NTuples(nTupleInfos);
+            var valueFunc = new ValueFunction<float>(nTuples);
             var slTrainer = new SupervisedTrainer<float>("AG01", valueFunc, new SupervisedTrainerConfig<float>());
             (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN");
             sw.Start();
