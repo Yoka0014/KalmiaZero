@@ -46,7 +46,7 @@ namespace KalmiaZero.Learn
             return (color == DiscColor.Black) ? this.TheoreticalScoreFromBlack : -this.TheoreticalScoreFromBlack;
         }
 
-        public static (TrainData[] trainData, TrainData[] testData) CreateTrainDataFromWTHORFiles(string dir, string jouFileName, string trnFileName, double testSize=0.1)
+        public static (TrainData[] trainData, TrainData[] testData) CreateTrainDataFromWTHORFiles(string dir, string jouFileName, string trnFileName, int numData=-1, double testSize=0.1)
         {
             var allData = new List<TrainData>();
             var jouPath = Path.Combine(dir, jouFileName);
@@ -58,9 +58,12 @@ namespace KalmiaZero.Learn
                     allData.Add(new TrainData(wthor.WtbHeader, game));
             }
 
+            if (numData < 0)
+                numData = allData.Count;
+
             Random.Shared.Shuffle(allData);
-            var numTestData = (int)(allData.Count * testSize);
-            var trainData = allData.Take(allData.Count - numTestData).ToArray();
+            var numTestData = (int)(numData * testSize);
+            var trainData = allData.Take(numData - numTestData).ToArray();
             var testData = allData.Skip(trainData.Length).Take(numTestData).ToArray();
             return (trainData, testData);
         }
