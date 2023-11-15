@@ -65,26 +65,22 @@ namespace KalmiaZero.NTuple
         public override readonly string ToString()
         {
             var sb = new StringBuilder();
-            foreach (var tuple in this.COORDINATES)
+            sb.Append("  ");
+            for (var i = 0; i < Constants.BOARD_SIZE; i++)
+                sb.Append((char)('A' + i)).Append(' ');
+
+            var tuple = this.COORDINATES[0];
+            for (var y = 0; y < Constants.BOARD_SIZE; y++)
             {
-                sb.Append("  ");
-                for (var i = 0; i < Constants.BOARD_SIZE; i++)
-                    sb.Append((char)('A' + i)).Append(' ');
-
-                for (var y = 0; y < Constants.BOARD_SIZE; y++)
+                sb.Append('\n').Append(y + 1).Append(' ');
+                for (var x = 0; x < Constants.BOARD_SIZE; x++)
                 {
-                    sb.Append('\n').Append(y + 1).Append(' ');
-                    for (var x = 0; x < Constants.BOARD_SIZE; x++)
-                    {
-                        var idx = Array.IndexOf(tuple, Reversi.Utils.Coordinate2DTo1D(x, y));
-                        if (idx != -1)
-                            sb.Append(idx).Append(' ');
-                        else
-                            sb.Append("- ");
-                    }
+                    var idx = Array.IndexOf(tuple, Reversi.Utils.Coordinate2DTo1D(x, y));
+                    if (idx != -1)
+                        sb.Append(idx).Append(' ');
+                    else
+                        sb.Append("- ");
                 }
-
-                sb.Append("\n\n");
             }
 
             return sb.ToString();

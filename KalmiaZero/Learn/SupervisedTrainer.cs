@@ -65,7 +65,7 @@ namespace KalmiaZero.Learn
             this.weightGradSquareSums = new WeightType[weights.Length];
         }
 
-        public void Train(TrainData[] trainData, TrainData[] testData)
+        public (WeightType trainLoss, WeightType testLoss) Train(TrainData[] trainData, TrainData[] testData, bool saveWeights = true, bool saveLossHistroy = true)
         {
             this.logger.Clear();
             Array.Clear(this.weightGradSquareSums);
@@ -86,12 +86,25 @@ namespace KalmiaZero.Learn
                 this.logger.Append("Epoch ").Append(epoch + 1).AppendLine(" has done.");
 
                 if ((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0)
-                    SaveWeights(epoch + 1);
+                {
+                    if(saveWeights)
+                        SaveWeights(epoch + 1);
+
+                    if(saveLossHistroy)
+                        SaveLossHistroy();
+                }
 
                 Console.WriteLine(this.logger.ToString());
                 this.logger.Clear();
             }
-            SaveWeights(this.CONFIG.NumEpoch);
+
+            if(saveWeights)
+                SaveWeights(this.CONFIG.NumEpoch);
+
+            if(saveLossHistroy)
+                SaveLossHistroy();
+
+            return this.lossHistory[^1];
         }
 
         void WriteLabel()
@@ -140,7 +153,10 @@ namespace KalmiaZero.Learn
             var weightsLabel = this.CONFIG.SaveOnlyLatestWeights ? "latest" : epoch.ToString();
             var path = string.Format(this.WEIGHTS_FILE_PATH, weightsLabel);
             this.valueFunc.SaveToFile(path);
+        }
 
+        void SaveLossHistroy()
+        {
             var trainLossSb = new StringBuilder("[");
             var testLossSb = new StringBuilder("[");
             foreach ((var trainLoss, var testLoss) in this.lossHistory)
