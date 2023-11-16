@@ -191,7 +191,7 @@ namespace KalmiaZero.Learn
         {
             var nTuples = new NTuples(DecodeChromosome(indivisual.Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
             var valueFunc = new ValueFunction<WeightType>(nTuples);
-            var slTrainer = new SupervisedTrainer<WeightType>($"INDV_{id}", valueFunc, this.SL_CONFIG);
+            var slTrainer = new SupervisedTrainer<WeightType>($"INDV_{id}", valueFunc, this.SL_CONFIG, Stream.Null);
             var loss = slTrainer.Train(evalData, Array.Empty<TrainData>(), saveWeights: false, saveLossHistroy: false).trainLoss;
             indivisual.Fitness = 1.0f / float.CreateChecked(loss);
         }

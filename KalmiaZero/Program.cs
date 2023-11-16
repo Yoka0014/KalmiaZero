@@ -1,12 +1,11 @@
 ﻿//#define ENGINE
-#define SL
+//#define SL
 //#define RL
 //#define MULTI_RL
-//#define SL_GA
+#define SL_GA
 //#define CHECK_GA_RES
 
 using System;
-
 using KalmiaZero.Reversi;
 using KalmiaZero.Protocols;
 using KalmiaZero.Engines;
