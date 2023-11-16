@@ -22,7 +22,7 @@ namespace KalmiaZero.Learn
         public double MutantRate { get; init; } = 0.2;
         public double EliteInheritanceProb { get; init; } = 0.7;
         public int NTupleSize { get; init; } = 7;
-        public int NumNTuples { get; init; } = 1;
+        public int NumNTuples { get; init; } = 12;
         public SupervisedTrainerConfig<WeightType> SLConfig { get; init; } = new() { NumEpoch = 20 };
         public int NumThreads { get; init; } = Environment.ProcessorCount;
         public Random Random { get; init; } = new (Random.Shared.Next());
@@ -166,7 +166,7 @@ namespace KalmiaZero.Learn
             {
                 ref var mutant = ref mutants[i];
                 for (var j = 0; j < mutant.Chromosome.Length; j++)
-                    mutant.Chromosome[i] = this.RAND.NextSingle();
+                    mutant.Chromosome[j] = this.RAND.NextSingle();
                 mutant.Fitness = float.NegativeInfinity;
             }
         }

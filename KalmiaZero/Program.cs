@@ -1,8 +1,8 @@
 ﻿//#define ENGINE
-//#define SL
+#define SL
 //#define RL
 //#define MULTI_RL
-#define SL_GA
+//#define SL_GA
 //#define CHECK_GA_RES
 
 using System;
@@ -77,7 +77,7 @@ namespace KalmiaZero
 
 #if SL_GA
             var sw = new Stopwatch();
-            (var trainData, _) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN", 0.0);
+            (var trainData, _) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN", numData: 10000, 0.0);
             var ga = new SupervisedGA<float>(new SupervisedGAConfig<float>());
             sw.Start();
             ga.Train(trainData, 1000);
@@ -86,13 +86,17 @@ namespace KalmiaZero
 #endif
 
 #if CHECK_GA_RES
-            var nTuplesSet = SupervisedGA<float>.DecodePool(args[0], 7, 1, 10);
+            var nTuplesSet = SupervisedGA<float>.DecodePool(args[0], 7, 12, 10);
             foreach (var nTuples in nTuplesSet)
+            {
+                Console.WriteLine("////////////////////////////////////////////////////");
                 foreach (var nTuple in nTuples.Tuples)
                 {
                     Console.WriteLine(nTuple);
                     Console.WriteLine();
                 }
+                Console.WriteLine();
+            }
 #endif
         }
     }

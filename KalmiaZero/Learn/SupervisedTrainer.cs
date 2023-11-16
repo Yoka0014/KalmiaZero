@@ -35,7 +35,7 @@ namespace KalmiaZero.Learn
         readonly SupervisedTrainerConfig<WeightType> CONFIG;
         readonly string WEIGHTS_FILE_PATH;
         readonly string LOSS_HISTORY_FILE_PATH;
-        readonly StringBuilder logger = new();
+        readonly StreamWriter logger;
 
         readonly PositionFeatureVector featureVec;
         readonly ValueFunction<WeightType> valueFunc;
@@ -49,9 +49,15 @@ namespace KalmiaZero.Learn
         int overfittingCount;
 
         public SupervisedTrainer(ValueFunction<WeightType> valueFunc, SupervisedTrainerConfig<WeightType> config)
-            : this(string.Empty, valueFunc, config) { }
+            : this(valueFunc, config, Console.OpenStandardOutput()) { }
+
+        public SupervisedTrainer(ValueFunction<WeightType> valueFunc, SupervisedTrainerConfig<WeightType> config, Stream logStream)
+            : this(string.Empty, valueFunc, config, logStream) { }
 
         public SupervisedTrainer(string label, ValueFunction<WeightType> valueFunc, SupervisedTrainerConfig<WeightType> config)
+            : this(label, valueFunc, config, Console.OpenStandardOutput()) { }
+
+        public SupervisedTrainer(string label, ValueFunction<WeightType> valueFunc, SupervisedTrainerConfig<WeightType> config, Stream logStream)
         {
             this.Label = label;
             this.CONFIG = config;
@@ -63,27 +69,28 @@ namespace KalmiaZero.Learn
             var weights = this.valueFunc.Weights;
             this.weightGrads = new WeightType[weights.Length];
             this.weightGradSquareSums = new WeightType[weights.Length];
+
+            this.logger = new StreamWriter(logStream);
+            this.logger.AutoFlush = false;
         }
 
-        public (WeightType trainLoss, WeightType testLoss) Train(TrainData[] trainData, TrainData[] testData, bool saveWeights = true, bool saveLossHistroy = true)
+        public (WeightType trainLoss, WeightType testLoss) Train(TrainData[] trainData, TrainData[] testData, bool saveWeights = true, bool saveLossHistroy = true, bool showLog=true)
         {
-            this.logger.Clear();
             Array.Clear(this.weightGradSquareSums);
             this.biasGradSquareSum = WeightType.Zero;
             this.prevTrainLoss = this.prevTestLoss = WeightType.PositiveInfinity;
             this.overfittingCount = 0;
 
             WriteLabel();
-            this.logger.AppendLine("Start learning.\n");
-            Console.WriteLine(this.logger.ToString());
-            this.logger.Clear();
+            this.logger.WriteLine("Start learning.\n");
+            this.logger.Flush();
 
             var continueFlag = true;
             for (var epoch = 0; epoch < this.CONFIG.NumEpoch && continueFlag; epoch++)
             {
                 WriteLabel();
                 continueFlag = ExecuteOneEpoch(trainData, testData);
-                this.logger.Append("Epoch ").Append(epoch + 1).AppendLine(" has done.");
+                this.logger.WriteLine($"Epoch {epoch + 1} has done.\n");
 
                 if ((epoch + 1) % this.CONFIG.SaveWeightsInterval == 0)
                 {
@@ -94,8 +101,7 @@ namespace KalmiaZero.Learn
                         SaveLossHistroy();
                 }
 
-                Console.WriteLine(this.logger.ToString());
-                this.logger.Clear();
+                this.logger.Flush();
             }
 
             if(saveWeights)
@@ -110,7 +116,7 @@ namespace KalmiaZero.Learn
         void WriteLabel()
         {
             if (!string.IsNullOrEmpty(this.Label))
-                this.logger.AppendLine($"[{this.Label}]");
+                this.logger.WriteLine($"[{this.Label}]");
         }
 
         static WeightType CalcAdaFactor(WeightType x) => WeightType.One / WeightType.Sqrt(x + WeightType.Epsilon);
@@ -122,24 +128,24 @@ namespace KalmiaZero.Learn
 
             var testLoss = CalculateLoss(testData);
 
-            this.logger.Append("test loss: ").Append(testLoss).Append('\n');
+            this.logger.WriteLine($"test loss: {testLoss}");
 
             var testLossDiff = testLoss - prevTestLoss;
             if (testLossDiff > this.CONFIG.Epsilon && ++this.overfittingCount > this.CONFIG.Pacience)
             {
-                this.logger.AppendLine("early stopping.");
+                this.logger.WriteLine("early stopping.");
                 return false;
             }
 
             var trainLoss = CalculateGradients(trainData);
-            this.logger.Append("train loss: ").Append(trainLoss).Append('\n');
+            this.logger.WriteLine($"train loss: {trainLoss}");
 
             this.lossHistory.Add((trainLoss, testLoss));
 
             var trainLossDiff = trainLoss - prevTrainLoss;
             if (WeightType.Abs(trainLossDiff) < this.CONFIG.Epsilon)
             {
-                this.logger.AppendLine("converged.");
+                this.logger.WriteLine("converged.");
                 return false;
             }
 

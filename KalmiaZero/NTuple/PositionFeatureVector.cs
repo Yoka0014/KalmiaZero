@@ -20,8 +20,8 @@ namespace KalmiaZero.NTuple
 
     public static class PositionFeaturesConstantConfig 
     {
-        public const FeatureType NUM_SQUARE_STATES = 4;     // BLACK, WHITE, REACHEABLE_EMPTY and UNREACHABLE_EMPTY
-        //public const int NUM_SQUARE_STATES = 3;   // BLACK, WHITE and EMPTY
+        //public const FeatureType NUM_SQUARE_STATES = 4;     // BLACK, WHITE, REACHEABLE_EMPTY and UNREACHABLE_EMPTY
+        public const int NUM_SQUARE_STATES = 3;   // BLACK, WHITE and EMPTY
 
         public const FeatureType BLACK = (int)DiscColor.Black;  // 0
         public const FeatureType WHITE = (int)DiscColor.White;  // 1
