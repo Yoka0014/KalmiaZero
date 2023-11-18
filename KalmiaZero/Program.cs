@@ -76,16 +76,19 @@ namespace KalmiaZero
 
 #if SL_GA
             var sw = new Stopwatch();
-            (var trainData, _) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN", numData: 10000, 0.0);
-            var ga = new SupervisedGA<float>(new SupervisedGAConfig<float>());
+            (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN", numData: 20000, 0.5);
+            var ga = new SupervisedGA<float>(new SupervisedGAConfig<float>() { SLConfig = new SupervisedTrainerConfig<float>() {NumEpoch = 20} });
             sw.Start();
-            ga.Train(trainData, 1000);
+            if (args.Length > 0)
+                ga.Train(args[0], trainData, testData, 1000);
+            else
+                ga.Train(trainData, testData, 1000);
             sw.Stop();
             Console.WriteLine($"{sw.ElapsedMilliseconds}[ms]");
 #endif
 
 #if CHECK_GA_RES
-            var nTuplesSet = SupervisedGA<float>.DecodePool(args[0], 7, 12, 10);
+            var nTuplesSet = SupervisedGA<float>.DecodePool(args[0], 10, 12, 10);
             foreach (var nTuples in nTuplesSet)
             {
                 Console.WriteLine("////////////////////////////////////////////////////");

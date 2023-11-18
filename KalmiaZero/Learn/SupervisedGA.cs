@@ -13,6 +13,8 @@ using KalmiaZero.Evaluation;
 using KalmiaZero.NTuple;
 using System.Threading;
 
+using static KalmiaZero.NTuple.PositionFeaturesConstantConfig;
+
 namespace KalmiaZero.Learn
 {
     public record class SupervisedGAConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
@@ -21,7 +23,7 @@ namespace KalmiaZero.Learn
         public double EliteRate { get; init; } = 0.2;
         public double MutantRate { get; init; } = 0.2;
         public double EliteInheritanceProb { get; init; } = 0.7;
-        public int NTupleSize { get; init; } = 7;
+        public int NTupleSize { get; init; } = 10;
         public int NumNTuples { get; init; } = 12;
         public SupervisedTrainerConfig<WeightType> SLConfig { get; init; } = new() { NumEpoch = 20 };
         public int NumThreads { get; init; } = Environment.ProcessorCount;
@@ -72,22 +74,25 @@ namespace KalmiaZero.Learn
             this.nextPool = new Indivisual[this.POPULATION_SIZE];
         }
 
-        public void Train(TrainData[] evalData, int numGenerations)
-            => Train(Enumerable.Range(0, POPULATION_SIZE).Select(_ => new Indivisual(Constants.NUM_SQUARES * this.NUM_NTUPLES, CONFIG.Random)).ToArray(), evalData, numGenerations);
+        public void Train(TrainData[] trainData, TrainData[] testData, int numGenerations)
+            => Train(Enumerable.Range(0, POPULATION_SIZE).Select(_ => new Indivisual(Constants.NUM_SQUARES * this.NUM_NTUPLES, CONFIG.Random)).ToArray(), trainData, testData, numGenerations);
 
-        public void Train(string poolPath, TrainData[] evalData, int numGenerations)
-            => Train(Indivisual.LoadPoolFromFile(poolPath), evalData, numGenerations);
+        public void Train(string poolPath, TrainData[] trainData, TrainData[] testData, int numGenerations)
+            => Train(Indivisual.LoadPoolFromFile(poolPath), trainData, testData, numGenerations);
 
-        void Train(Indivisual[] initialPool, TrainData[] evalData, int numGenerations)
+        void Train(Indivisual[] initialPool, TrainData[] trainData, TrainData[] testData, int numGenerations)
         {
             Array.Copy(initialPool, this.pool, this.pool.Length);
             Array.Copy(initialPool, this.nextPool, this.nextPool.Length);
+
+            for (var i = 0; i < this.pool.Length; i++)
+                this.pool[i].Fitness = float.NegativeInfinity;
 
             for (var gen = 0; gen < numGenerations; gen++)
             {
                 Console.WriteLine($"Generation: {gen}");
 
-                EvaluatePool(evalData);
+                EvaluatePool(trainData, testData);
 
                 this.fitnessHistory.Add((this.pool[0].Fitness, this.pool[^1].Fitness, this.pool[this.pool.Length / 2].Fitness, this.pool.Average(p => p.Fitness)));
 
@@ -145,14 +150,14 @@ namespace KalmiaZero.Learn
             sw.WriteLine(averageSb.ToString());
         }
 
-        void EvaluatePool(TrainData[] evalData)
+        void EvaluatePool(TrainData[] trainData, TrainData[] testData)
         {
             Console.WriteLine("Start evaluation.");
             var count = 0;
             Parallel.For(0, this.pool.Length, this.PARALLEL_OPTIONS, i =>
             {
                 if (float.IsNegativeInfinity(this.pool[i].Fitness))
-                    EvaluateIndivisual(ref this.pool[i], evalData, i);
+                    EvaluateIndivisual(ref this.pool[i], trainData, testData, i);
                 Interlocked.Increment(ref count);
                 Console.WriteLine($"{count} indivisuals were evaluated({count * 100.0 / this.POPULATION_SIZE:f2}%).");
             });
@@ -187,13 +192,72 @@ namespace KalmiaZero.Learn
             child.Fitness = float.NegativeInfinity;
         }
 
-        void EvaluateIndivisual(ref Indivisual indivisual, TrainData[] evalData, int id)
+        void EvaluateIndivisual(ref Indivisual indivisual, TrainData[] trainData, TrainData[] testData, int id)
         {
             var nTuples = new NTuples(DecodeChromosome(indivisual.Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
             var valueFunc = new ValueFunction<WeightType>(nTuples);
             var slTrainer = new SupervisedTrainer<WeightType>($"INDV_{id}", valueFunc, this.SL_CONFIG, Stream.Null);
-            var loss = slTrainer.Train(evalData, Array.Empty<TrainData>(), saveWeights: false, saveLossHistroy: false).trainLoss;
-            indivisual.Fitness = 1.0f / float.CreateChecked(loss);
+            slTrainer.Train(trainData, Array.Empty<TrainData>(), saveWeights: false, saveLossHistroy: false);
+            indivisual.Fitness = float.CreateChecked(WeightType.One / CalculateLoss(valueFunc, testData));
+        }
+
+        WeightType CalculateLoss(ValueFunction<WeightType> valueFunc, TrainData[] trainData)
+        {
+            var loss = WeightType.Zero;
+            var count = 0;
+            var featureVec = new PositionFeatureVector(valueFunc.NTuples);
+            Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
+            var numMoves = 0;
+            for (var i = 0; i < trainData.Length; i++)
+            {
+                ref var data = ref trainData[i];
+                var pos = data.RootPos;
+
+                if (NUM_SQUARE_STATES == 4)
+                    numMoves = pos.GetNextMoves(ref moves);
+
+                featureVec.Init(ref pos, moves[..numMoves]);
+
+                for (var j = 0; j < data.Moves.Length; j++)
+                {
+                    var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
+                    loss += LossFunctions.BinaryCrossEntropy(valueFunc.PredictWithBlackWeights(featureVec), reward);
+                    count++;
+
+                    ref var move = ref data.Moves[j];
+                    if (move.Coord != BoardCoordinate.Pass)
+                    {
+                        pos.Update(ref move);
+
+                        if (NUM_SQUARE_STATES == 4)
+                            numMoves = pos.GetNextMoves(ref moves);
+
+                        featureVec.Update(ref move, moves[..numMoves]);
+                    }
+                    else
+                    {
+                        pos.Pass();
+
+                        if (NUM_SQUARE_STATES == 4)
+                            numMoves = pos.GetNextMoves(ref moves);
+
+                        featureVec.Pass(moves[..numMoves]);
+                    }
+                }
+            }
+            return loss / WeightType.CreateChecked(count);
+        }
+
+        static WeightType GetReward(ref TrainData data, DiscColor sideToMove, int emptySquareCount)
+        {
+            var score = (emptySquareCount >= data.TheoreticalScoreDepth) ? data.TheoreticalScoreFromBlack : data.ScoreFromBlack;
+            if (sideToMove != DiscColor.Black)
+                score *= -1;
+
+            if (score == 0)
+                return WeightType.One / (WeightType.One + WeightType.One);
+
+            return (score > 0) ? WeightType.One : WeightType.Zero;
         }
 
         public static NTuples[] DecodePool(string poolPath, int nTupleSize, int numNTuples, int numIndivisual=-1)

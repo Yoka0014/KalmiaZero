@@ -287,15 +287,15 @@ namespace KalmiaZero.Learn
             this.valueFunc.Bias -= eta * CalcAdaFactor(this.biasGradSquareSum) * this.biasGrad;
         }
 
-        WeightType CalculateLoss(TrainData[] testData)
+        WeightType CalculateLoss(TrainData[] trainData)
         {
             var loss = WeightType.Zero;
             var count = 0;
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
-            for (var i = 0; i < testData.Length; i++)
+            for (var i = 0; i < trainData.Length; i++)
             {
-                ref var data = ref testData[i];
+                ref var data = ref trainData[i];
                 var pos = data.RootPos;
 
                 if (NUM_SQUARE_STATES == 4)
