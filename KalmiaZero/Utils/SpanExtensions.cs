@@ -5,7 +5,7 @@ namespace KalmiaZero.Utils
 {
     internal static class SpanExtensions
     {
-        public static bool Contains<T>(this Span<T> span, T value) where T : IComparable
+        public static bool Contains<T>(this ReadOnlySpan<T> span, T value) where T : IComparable
         {
             foreach(var n in span)
                 if(n.CompareTo(value) == 0)

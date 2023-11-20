@@ -1,9 +1,9 @@
 ﻿//#define ENGINE
 //#define SL
 //#define RL
-//#define MULTI_RL
-#define SL_GA
-//#define CHECK_GA_RES
+#define MULTI_RL
+//#define SL_GA
+//#define OUT_GA_RES
 
 using System;
 using KalmiaZero.Reversi;
@@ -69,7 +69,7 @@ namespace KalmiaZero
             var sw = new Stopwatch();
             sw.Start();
             TDTrainer<float>.TrainMultipleAgents(Environment.CurrentDirectory,
-                new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 24, 7, 100);
+                new TDTrainerConfig<float> { NumEpisodes = 250_000, SaveWeightsInterval = 10000 }, 100, 10, 12);
             sw.Stop();
             Console.WriteLine(sw.ElapsedMilliseconds);
 #endif
@@ -87,17 +87,24 @@ namespace KalmiaZero
             Console.WriteLine($"{sw.ElapsedMilliseconds}[ms]");
 #endif
 
-#if CHECK_GA_RES
+#if OUT_GA_RES
             var nTuplesSet = SupervisedGA<float>.DecodePool(args[0], 10, 12, 10);
-            foreach (var nTuples in nTuplesSet)
+            using var sw = new StreamWriter("ntuples.txt");
+            var nTuples = nTuplesSet[0].Tuples;
+            foreach(var nTuple in nTuples)
             {
-                Console.WriteLine("////////////////////////////////////////////////////");
-                foreach (var nTuple in nTuples.Tuples)
+                sw.Write('[');
+                for(var coord = BoardCoordinate.A1; coord <= BoardCoordinate.H8; coord++)
                 {
-                    Console.WriteLine(nTuple);
-                    Console.WriteLine();
+                    if (nTuple.GetCoordinates(0).Contains(coord))
+                        sw.Write(1);
+                    else
+                        sw.Write(0);
+
+                    if(coord != BoardCoordinate.H8)
+                        sw.Write(',');
                 }
-                Console.WriteLine();
+                sw.WriteLine(']');
             }
 #endif
         }

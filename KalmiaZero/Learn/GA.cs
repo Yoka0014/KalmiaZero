@@ -17,7 +17,7 @@ using static KalmiaZero.NTuple.PositionFeaturesConstantConfig;
 
 namespace KalmiaZero.Learn
 {
-    public record class SupervisedGAConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
+    public record class GAConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
         public int PopulationSize { get; init; } = 100;
         public double EliteRate { get; init; } = 0.2;
@@ -34,9 +34,9 @@ namespace KalmiaZero.Learn
         public string FitnessHistroyFileName { get; init; } = "fitness_histroy";
     }
 
-    public class SupervisedGA<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
+    public class GA<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
     {
-        readonly SupervisedGAConfig<WeightType> CONFIG;
+        readonly GAConfig<WeightType> CONFIG;
         readonly SupervisedTrainerConfig<WeightType> SL_CONFIG;
         readonly string POOL_FILE_PATH;
         readonly string FITNESS_HISTROY_FILE_PATH;
@@ -54,7 +54,7 @@ namespace KalmiaZero.Learn
 
         readonly List<(float best, float worst, float median, float average)> fitnessHistory = new();
 
-        public SupervisedGA(SupervisedGAConfig<WeightType> config) 
+        public GA(GAConfig<WeightType> config) 
         {
             this.CONFIG = config;
             this.SL_CONFIG = config.SLConfig;
