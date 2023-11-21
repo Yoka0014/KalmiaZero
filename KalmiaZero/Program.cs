@@ -1,9 +1,10 @@
 ﻿//#define ENGINE
 //#define SL
 //#define RL
-#define MULTI_RL
+//#define MULTI_RL
 //#define SL_GA
 //#define OUT_GA_RES
+#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
 
 using System;
 using KalmiaZero.Reversi;
@@ -106,6 +107,10 @@ namespace KalmiaZero
                 }
                 sw.WriteLine(']');
             }
+#endif
+
+#if CREATE_VALUE_FUNC_FROM_INDIVIDUAL
+
 #endif
         }
     }

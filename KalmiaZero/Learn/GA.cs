@@ -49,8 +49,8 @@ namespace KalmiaZero.Learn
         readonly Random RAND;
         readonly ParallelOptions PARALLEL_OPTIONS;
 
-        Indivisual[] pool;
-        Indivisual[] nextPool;
+        Individual[] pool;
+        Individual[] nextPool;
 
         readonly List<(float best, float worst, float median, float average)> fitnessHistory = new();
 
@@ -70,17 +70,17 @@ namespace KalmiaZero.Learn
             this.RAND = config.Random;
             this.PARALLEL_OPTIONS = new ParallelOptions { MaxDegreeOfParallelism = config.NumThreads };
             
-            this.pool = new Indivisual[this.POPULATION_SIZE];
-            this.nextPool = new Indivisual[this.POPULATION_SIZE];
+            this.pool = new Individual[this.POPULATION_SIZE];
+            this.nextPool = new Individual[this.POPULATION_SIZE];
         }
 
         public void Train(TrainData[] trainData, TrainData[] testData, int numGenerations)
-            => Train(Enumerable.Range(0, POPULATION_SIZE).Select(_ => new Indivisual(Constants.NUM_SQUARES * this.NUM_NTUPLES, CONFIG.Random)).ToArray(), trainData, testData, numGenerations);
+            => Train(Enumerable.Range(0, POPULATION_SIZE).Select(_ => new Individual(Constants.NUM_SQUARES * this.NUM_NTUPLES, CONFIG.Random)).ToArray(), trainData, testData, numGenerations);
 
         public void Train(string poolPath, TrainData[] trainData, TrainData[] testData, int numGenerations)
-            => Train(Indivisual.LoadPoolFromFile(poolPath), trainData, testData, numGenerations);
+            => Train(Individual.LoadPoolFromFile(poolPath), trainData, testData, numGenerations);
 
-        void Train(Indivisual[] initialPool, TrainData[] trainData, TrainData[] testData, int numGenerations)
+        void Train(Individual[] initialPool, TrainData[] trainData, TrainData[] testData, int numGenerations)
         {
             Array.Copy(initialPool, this.pool, this.pool.Length);
             Array.Copy(initialPool, this.nextPool, this.nextPool.Length);
@@ -102,10 +102,10 @@ namespace KalmiaZero.Learn
                 Console.WriteLine($"MedianFitness: {median}");
                 Console.WriteLine($"AverageFitness: {average}");
 
-                Indivisual.SavePoolAt(this.pool, string.Format(POOL_FILE_PATH, gen));
+                Individual.SavePoolAt(this.pool, string.Format(POOL_FILE_PATH, gen));
                 SaveFitnessHistory();
 
-                Console.WriteLine("Generate indivisuals for next generation.");
+                Console.WriteLine("Generate individuals for next generation.");
                 var elites = this.pool.AsSpan(0, this.NUM_ELITES);
                 var nonElites = this.pool.AsSpan(this.NUM_ELITES);
                 elites.CopyTo(this.nextPool);
@@ -157,9 +157,9 @@ namespace KalmiaZero.Learn
             Parallel.For(0, this.pool.Length, this.PARALLEL_OPTIONS, i =>
             {
                 if (float.IsNegativeInfinity(this.pool[i].Fitness))
-                    EvaluateIndivisual(ref this.pool[i], trainData, testData, i);
+                    EvaluateIndividual(ref this.pool[i], trainData, testData, i);
                 Interlocked.Increment(ref count);
-                Console.WriteLine($"{count} indivisuals were evaluated({count * 100.0 / this.POPULATION_SIZE:f2}%).");
+                Console.WriteLine($"{count} individuals were evaluated({count * 100.0 / this.POPULATION_SIZE:f2}%).");
             });
             Array.Sort(this.pool);
         }
@@ -176,14 +176,14 @@ namespace KalmiaZero.Learn
             }
         }
 
-        void GenerateChildren(ref Span<Indivisual> elites, ref Span<Indivisual> nonElites)
+        void GenerateChildren(ref Span<Individual> elites, ref Span<Individual> nonElites)
         {
             var children = this.nextPool.AsSpan(this.NUM_ELITES + this.NUM_MUTANTS);
             for (var i = 0; i < children.Length; i++)
                 Crossover(ref elites[this.RAND.Next(elites.Length)], ref nonElites[this.RAND.Next(nonElites.Length)], ref children[i]);
         }
 
-        void Crossover(ref Indivisual eliteParent, ref Indivisual nonEliteParent, ref Indivisual child)
+        void Crossover(ref Individual eliteParent, ref Individual nonEliteParent, ref Individual child)
         {
             (var eliteChrom, var nonEliteChrom) = (eliteParent.Chromosome, nonEliteParent.Chromosome);
             var childChrom = child.Chromosome;
@@ -192,13 +192,13 @@ namespace KalmiaZero.Learn
             child.Fitness = float.NegativeInfinity;
         }
 
-        void EvaluateIndivisual(ref Indivisual indivisual, TrainData[] trainData, TrainData[] testData, int id)
+        void EvaluateIndividual(ref Individual individual, TrainData[] trainData, TrainData[] testData, int id)
         {
-            var nTuples = new NTuples(DecodeChromosome(indivisual.Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
+            var nTuples = new NTuples(DecodeChromosome(individual.Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
             var valueFunc = new ValueFunction<WeightType>(nTuples);
             var slTrainer = new SupervisedTrainer<WeightType>($"INDV_{id}", valueFunc, this.SL_CONFIG, Stream.Null);
             slTrainer.Train(trainData, Array.Empty<TrainData>(), saveWeights: false, saveLossHistroy: false);
-            indivisual.Fitness = float.CreateChecked(WeightType.One / CalculateLoss(valueFunc, testData));
+            individual.Fitness = float.CreateChecked(WeightType.One / CalculateLoss(valueFunc, testData));
         }
 
         WeightType CalculateLoss(ValueFunction<WeightType> valueFunc, TrainData[] trainData)
@@ -260,14 +260,14 @@ namespace KalmiaZero.Learn
             return (score > 0) ? WeightType.One : WeightType.Zero;
         }
 
-        public static NTuples[] DecodePool(string poolPath, int nTupleSize, int numNTuples, int numIndivisual=-1)
+        public static NTuples[] DecodePool(string poolPath, int nTupleSize, int numNTuples, int numIndividual=-1)
         {
-            var pool = Indivisual.LoadPoolFromFile(poolPath);
+            var pool = Individual.LoadPoolFromFile(poolPath);
             Array.Sort(pool);
-            if (numIndivisual == -1)
-                numIndivisual = pool.Length;
+            if (numIndividual == -1)
+                numIndividual = pool.Length;
 
-            var nTuplesSet = new NTuples[numIndivisual];
+            var nTuplesSet = new NTuples[numIndividual];
             for (var i = 0; i < nTuplesSet.Length; i++)
                 nTuplesSet[i] = new NTuples(DecodeChromosome(pool[i].Chromosome, nTupleSize, numNTuples));
 
@@ -321,7 +321,7 @@ namespace KalmiaZero.Learn
             return nTuples;
         }
 
-        struct Indivisual : IComparable<Indivisual> 
+        struct Individual : IComparable<Individual> 
         {
             const string LABEL = "KalmiaZero_Pool";
             const string LABEL_INVERSED = "looP_oreZaimlaK";
@@ -330,15 +330,15 @@ namespace KalmiaZero.Learn
             public float[] Chromosome;
             public float Fitness;
             
-            public Indivisual(int chromosomeSize) : this(chromosomeSize, Random.Shared) { }
+            public Individual(int chromosomeSize) : this(chromosomeSize, Random.Shared) { }
 
-            public Indivisual(int chromosomeSize, Random rand)
+            public Individual(int chromosomeSize, Random rand)
             {
                 this.Chromosome = Enumerable.Range(0, chromosomeSize).Select(_ => rand.NextSingle()).ToArray();
                 this.Fitness = float.NegativeInfinity;
             }
 
-            public Indivisual(Stream stream, bool swapBytes)
+            public Individual(Stream stream, bool swapBytes)
             {
                 const int BUFFER_SIZE = 4;
 
@@ -363,7 +363,7 @@ namespace KalmiaZero.Learn
                 stream.Write(BitConverter.GetBytes(this.Fitness));
             }
 
-            public readonly int CompareTo(Indivisual other) => Math.Sign(other.Fitness - this.Fitness);
+            public readonly int CompareTo(Individual other) => Math.Sign(other.Fitness - this.Fitness);
 
             /**
              *  format of file
@@ -373,7 +373,7 @@ namespace KalmiaZero.Learn
              *  offset = LABEL_SIZE + 5: INDIVISUAL[0]
              *  ...
              **/
-            public static Indivisual[] LoadPoolFromFile(string path)
+            public static Individual[] LoadPoolFromFile(string path)
             {
                 Span<byte> buffer = stackalloc byte[LABEL_SIZE];
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
@@ -385,10 +385,10 @@ namespace KalmiaZero.Learn
                     throw new InvalidDataException($"The format of \"{path}\" is invalid.");
 
                 fs.Read(buffer[..sizeof(int)], swapBytes);
-                return Enumerable.Range(0, BitConverter.ToInt32(buffer)).Select(_ => new Indivisual(fs, swapBytes)).ToArray();
+                return Enumerable.Range(0, BitConverter.ToInt32(buffer)).Select(_ => new Individual(fs, swapBytes)).ToArray();
             }
 
-            public static void SavePoolAt(Indivisual[] pool, string path)
+            public static void SavePoolAt(Individual[] pool, string path)
             {
                 Span<byte> buffer = stackalloc byte[LABEL_SIZE];
                 using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
