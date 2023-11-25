@@ -60,10 +60,6 @@ namespace KalmiaZero.Engines
             option.ValueChanged += OnNumThreadsChanged;
             this.Options["num_threads"] = option;
 
-            option = new EngineOption(5000_000, 100, uint.MaxValue);
-            option.ValueChanged += OnNumNodesLimitChanged;
-            this.Options["num_nodes_limit"] = option;
-
             this.Options["num_playouts"] = new EngineOption(10000, 10, uint.MaxValue);
             this.Options["num_stochastic_moves"] = new EngineOption(0, 0, Constants.NUM_SQUARES - 4);
             this.Options["softmax_temperature"] = new EngineOption(1000, 0, long.MaxValue);
@@ -333,7 +329,6 @@ namespace KalmiaZero.Engines
                 if (searchInfo is null)
                     return;
 
-                Console.Error.WriteLine(status);
                 WriteLog(SearchInfoToString(searchInfo));
                 SendMove(SelectMove(searchInfo));
             }
@@ -533,17 +528,6 @@ namespace KalmiaZero.Engines
             }
 
             this.tree.NumThreads = (int)e;
-        }
-
-        void OnNumNodesLimitChanged(object? sender, dynamic e)
-        {
-            if (this.tree is null)
-            {
-                SendErrorMessage("Specifiy weights file path of value function.");
-                return;
-            }
-
-            this.tree.NumNodesLimit = e;
         }
 
         void OnThoughtLogPathChanged(object? sender, dynamic e)

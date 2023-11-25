@@ -69,9 +69,8 @@ namespace KalmiaZero.Search.MCTS
         Timeout = 0x0004,
         Proved = 0x0002,
         SuspendedByStopSignal = 0x0008,
-        OverNodes = 0x0010,
-        EarlyStopping = 0x0020,
-        Extended = 0x0f00
+        EarlyStopping = 0x0010,
+        Extended = 0x0020
     }
 
     public class PUCT
@@ -81,7 +80,6 @@ namespace KalmiaZero.Search.MCTS
         static ReadOnlySpan<double> GAME_RESULT_TO_REWARD => new double[3] { 1.0, 0.0, 0.5 };
 
         public event EventHandler<SearchInfo?>? SearchInfoWasSent;
-        public uint NumNodesLimit { get; set; } = 5000_000;
         public int SearchInfoSendIntervalCs { get; set; }
         public bool EnableEarlyStopping { get; set; }
         public int SearchEllapsedMs => this.isSearching ? Environment.TickCount - this.searchStartTime : this.searchEndTime - this.searchStartTime;
@@ -338,12 +336,6 @@ namespace KalmiaZero.Search.MCTS
             if (this.SearchEllapsedMs >= timeLimitMs)
             {
                 endStatus = SearchEndStatus.Timeout;
-                return true;
-            }
-
-            if (Node.ObjectCount >= this.NumNodesLimit)
-            {
-                endStatus = SearchEndStatus.OverNodes;
                 return true;
             }
 
