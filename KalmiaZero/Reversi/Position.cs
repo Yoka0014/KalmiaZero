@@ -27,7 +27,7 @@ namespace KalmiaZero.Reversi
         public readonly int BlackDiscCount => this.sideToMove == DiscColor.Black ? this.PlayerDiscCount : this.OpponentDiscCount;
         public readonly int WhiteDiscCount => this.sideToMove == DiscColor.White ? this.PlayerDiscCount : this.OpponentDiscCount;
         public readonly int DiscCount => this.bitboard.DiscCount;
-        public readonly int DiscDiff => this.PlayerDiscCount - this.OpponentDiscCount;
+        public readonly int DiscDiff => (!Constants.ENABLE_LOSS_IS_WIN_MODE) ? this.PlayerDiscCount - this.OpponentDiscCount : this.OpponentDiscCount - this.PlayerDiscCount;
         public readonly int EmptySquareCount => this.bitboard.EmptySquareCount;
         public readonly bool CanPass => this.bitboard.ComputePlayerMobility() == 0UL && this.bitboard.ComputeOpponentMobility() != 0UL;
         public readonly bool IsGameOver => this.bitboard.ComputePlayerMobility() == 0UL &&  this.bitboard.ComputeOpponentMobility() == 0UL;

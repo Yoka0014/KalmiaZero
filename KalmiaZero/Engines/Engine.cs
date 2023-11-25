@@ -211,6 +211,7 @@ namespace KalmiaZero.Engines
         protected void SendThinkInfo(ThinkInfo thinkInfo) => this.ThinkInfoWasSent(this, thinkInfo);
         protected void SendMultiPV(MultiPV multiPV) => this.MultiPVWereSent(this, multiPV);
         protected void SendMove(EngineMove move) => this.MoveWasSent(this, move);
+        protected void EndAnalysis() => this.AnalysisEnded(this, EventArgs.Empty);
 
         protected abstract bool OnReady();
         protected abstract void OnStartGame();

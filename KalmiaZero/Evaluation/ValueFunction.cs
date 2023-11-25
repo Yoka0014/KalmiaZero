@@ -20,7 +20,9 @@ namespace KalmiaZero.Evaluation
         const int LABEL_SIZE = 10;
 
         public NTuples NTuples { get; }
-        public WeightType Bias { get; set; }
+        public WeightType Bias { get => this.bias; set => this.bias = value; }
+        public ref WeightType BiasRef { get => ref this.bias; }
+        WeightType bias;
 
         public WeightType[] Weights { get; private set; }
         public ReadOnlySpan<int> DiscColorOffset => this.discColorOffset;

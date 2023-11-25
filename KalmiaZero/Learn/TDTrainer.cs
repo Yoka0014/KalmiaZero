@@ -42,19 +42,28 @@ namespace KalmiaZero.Learn
         readonly TDTrainerConfig<WeightType> CONFIG;
         readonly double EXPLORATION_RATE_DELTA;
         readonly string WEIGHTS_FILE_PATH;
+        readonly StreamWriter logger;
 
         readonly ValueFunction<WeightType> valueFunc;
         readonly PastStatesBuffer pastStatesBuffer;
-        WeightType[][]? weightDeltaSum;
-        WeightType[][]? weightDeltaAbsSum;
+        readonly WeightType[] weightDeltaSum;
+        readonly WeightType[] weightDeltaAbsSum;
         WeightType biasDeltaSum;
         WeightType biasDeltaAbsSum;
+        WeightType meanWeightDelta;
 
         readonly Random rand;
 
-        public TDTrainer(ValueFunction<WeightType> valueFunc, TDTrainerConfig<WeightType> config, int randSeed = -1) : this(string.Empty, valueFunc, config, randSeed) { }
+        public TDTrainer(ValueFunction<WeightType> valueFunc, TDTrainerConfig<WeightType> config, int randSeed = -1)
+        : this(valueFunc, config, Console.OpenStandardOutput(), randSeed) { }
 
-        public TDTrainer(string label, ValueFunction<WeightType> valueFunc, TDTrainerConfig<WeightType> config, int randSeed = -1)
+        public TDTrainer(ValueFunction<WeightType> valueFunc, TDTrainerConfig<WeightType> config, Stream logStream, int randSeed = -1)
+        : this(string.Empty, valueFunc, config, logStream, randSeed) { }
+
+        public TDTrainer(string label, ValueFunction<WeightType> valueFunc, TDTrainerConfig<WeightType> config)
+        : this(label, valueFunc, config, Console.OpenStandardOutput()) { }
+
+        public TDTrainer(string label, ValueFunction<WeightType> valueFunc, TDTrainerConfig<WeightType> config, Stream logStream, int randSeed = -1)
         {
             this.Label = label;
             this.CONFIG = config;
@@ -62,10 +71,16 @@ namespace KalmiaZero.Learn
             this.WEIGHTS_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.WeightsFileName}_{"{0}"}.bin");
 
             this.valueFunc = valueFunc;
+            var numWeights = valueFunc.Weights.Length;
+            this.weightDeltaSum = new WeightType[numWeights];
+            this.weightDeltaAbsSum = new WeightType[numWeights];
             var capasity = int.CreateChecked(WeightType.Log(config.HorizonCutFactor, config.EligibilityTraceFactor)) + 1;
             this.pastStatesBuffer = new PastStatesBuffer(capasity, valueFunc.NTuples);
 
             this.rand = (randSeed >= 0) ? new Random(randSeed) : new Random(Random.Shared.Next());
+
+            this.logger = new StreamWriter(logStream);
+            this.logger.AutoFlush = false;
         }
 
         public static void TrainMultipleAgents(string workDir, TDTrainerConfig<WeightType> config, int numAgents, int tupleSize, int numTuples)
@@ -90,27 +105,16 @@ namespace KalmiaZero.Learn
 
         public void Train()
         {
-            var sb = new StringBuilder();
-
             var explorationRate = this.CONFIG.InitialExplorationRate;
             var tclEpsilon = WeightType.CreateChecked(TCL_EPSILON);
-            this.weightDeltaSum = new WeightType[this.valueFunc.NTuples.Length][];
-            this.weightDeltaAbsSum = new WeightType[this.valueFunc.NTuples.Length][];
-            var numFeatures = this.valueFunc.NTuples.NumPossibleFeatures;
-            for (var nTupleID = 0; nTupleID < this.valueFunc.NTuples.Length; nTupleID++)
-            {
-                var len = numFeatures[nTupleID];
-                this.weightDeltaSum[nTupleID] = Enumerable.Repeat(tclEpsilon, len).ToArray();
-                this.weightDeltaAbsSum[nTupleID] = Enumerable.Repeat(tclEpsilon, len).ToArray();
-            }
-
+            Array.Fill(this.weightDeltaSum, tclEpsilon);
+            Array.Fill(this.weightDeltaAbsSum, tclEpsilon);
             this.biasDeltaSum = this.biasDeltaAbsSum = tclEpsilon;
 
-            WriteLabel(sb);
-            sb.AppendLine("Start learning.\n");
-            WriteParams(sb, explorationRate);
-            Console.WriteLine(sb.ToString());
-            sb.Clear();
+            WriteLabel();
+            this.logger.WriteLine("Start learning.\n");
+            WriteParams(explorationRate);
+            this.logger.Flush();
 
             for (var episodeID = 0; episodeID < this.CONFIG.NumEpisodes; episodeID++)
             {
@@ -119,52 +123,41 @@ namespace KalmiaZero.Learn
 
                 if ((episodeID + 1) % this.CONFIG.SaveWeightsInterval == 0)
                 {
-                    WriteLabel(sb);
+                    WriteLabel();
 
                     var fromEpisodeID = episodeID - this.CONFIG.SaveWeightsInterval + 1;
-                    sb.Append("Episodes ").Append(fromEpisodeID).Append(" to ").Append(episodeID).Append(" have done.\n");
+                    this.logger.WriteLine($"Episodes {fromEpisodeID} to {episodeID} have done.");
 
                     var path = string.Format(this.WEIGHTS_FILE_PATH, episodeID);
                     this.valueFunc.SaveToFile(path);
 
-                    sb.AppendLine($"Weights were saved at \"{path}\"\n");
-                    WriteParams(sb, explorationRate);
-                    Console.WriteLine(sb.ToString());
-                    sb.Clear();
+                    this.logger.WriteLine($"Weights were saved at \"{path}\"\n");
+                    WriteParams(explorationRate);
+                    this.logger.WriteLine();
+                    this.logger.Flush();
                 }
             }
         }
 
-        void WriteLabel(StringBuilder sb)
+        void WriteLabel()
         {
             if (!string.IsNullOrEmpty(this.Label))
-                sb.AppendLine($"[{this.Label}]");
+                this.logger.WriteLine($"[{this.Label}]");
         }
 
-        void WriteParams(StringBuilder sb, double explorationRate)
+        void WriteParams(double explorationRate)
         {
-            sb.Append($"ExplorationRate: ").Append(explorationRate).Append('\n');
-            sb.Append($"LearningRateMean: ").Append(CalcAverageLearningRate()).Append('\n');
+            this.logger.WriteLine($"ExplorationRate: {explorationRate}");
+            this.logger.WriteLine($"MeanLearningRate: {CalcMeanLearningRate()}");
         }
 
-        WeightType CalcAverageLearningRate()
+        WeightType CalcMeanLearningRate()
         {
-            Debug.Assert(this.weightDeltaSum is not null);
-            Debug.Assert(this.weightDeltaAbsSum is not null);
-
-            var count = 0;
             var sum = WeightType.Zero;
-            for (var i = 0; i < this.valueFunc.NTuples.Length; i++)
-            {
-                foreach ((var a, var n) in this.weightDeltaAbsSum[i].Zip(this.weightDeltaSum[i]))
-                {
-                    sum += Decay(WeightType.Abs(n / a));
-                    count++;
-                }
-            }
-
+            foreach ((var n, var a) in this.weightDeltaSum.Zip(this.weightDeltaAbsSum))
+                sum += Decay(WeightType.Abs(n / a));
             sum += Decay(this.biasDeltaSum / this.biasDeltaAbsSum);
-            return this.CONFIG.LearningRate * sum / WeightType.CreateChecked(count + 1);
+            return this.CONFIG.LearningRate * sum / WeightType.CreateChecked(this.weightDeltaSum.Length + 1);
         }
 
         void RunEpisode(double explorationRate)
@@ -247,14 +240,16 @@ namespace KalmiaZero.Learn
             var eligibility = WeightType.One;
 
             fixed (WeightType* weights = this.valueFunc.Weights)
+            fixed (WeightType* weightDeltaSum = this.weightDeltaSum)
+            fixed (WeightType* weightDeltaAbsSum = this.weightDeltaAbsSum)
             {
                 foreach (var posFeatureVec in this.pastStatesBuffer)
                 {
                     var delta = eligibility * tdError;
                     if (posFeatureVec.SideToMove == DiscColor.Black)
-                        ApplyGradients<Black>(posFeatureVec, weights, alpha, beta, delta);
+                        ApplyGradients<Black>(posFeatureVec, weights, weightDeltaSum, weightDeltaAbsSum, alpha, beta, delta);
                     else
-                        ApplyGradients<White>(posFeatureVec, weights, alpha, beta, delta);
+                        ApplyGradients<White>(posFeatureVec, weights, weightDeltaSum, weightDeltaAbsSum, alpha, beta, delta);
 
                     var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
                     var lr = reg * alpha * Decay(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
@@ -270,19 +265,18 @@ namespace KalmiaZero.Learn
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        unsafe void ApplyGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType alpha, WeightType beta, WeightType delta) where DiscColor : IDiscColor
+        unsafe void ApplyGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType* weightDeltaSum, WeightType* weightDeltaAbsSum, WeightType alpha, WeightType beta, WeightType delta) where DiscColor : IDiscColor
         {
-            Debug.Assert(this.weightDeltaSum is not null);
-            Debug.Assert(this.weightDeltaAbsSum is not null);
-
             for (var i = 0; i < posFeatureVec.Features.Length; i++)
             {
-                var w = weights + this.valueFunc.NTupleOffset[i];
+                var offset = this.valueFunc.NTupleOffset[i];
+                var w = weights + offset;
+                var dwSum = weightDeltaSum + offset;
+                var dwAbsSum = weightDeltaAbsSum + offset;
+
                 ref Feature feature = ref posFeatureVec.Features[i];
                 fixed (FeatureType* opp = posFeatureVec.NTuples.GetOpponentFeatureRawTable(i))
                 fixed (FeatureType* mirror = posFeatureVec.NTuples.GetMirroredFeatureRawTable(i))
-                fixed (WeightType* dwSum = this.weightDeltaSum[i])
-                fixed (WeightType* dwAbsSum = this.weightDeltaAbsSum[i])
                 {
                     var reg = WeightType.One / WeightType.CreateChecked((posFeatureVec.NumNTuples + 1) * feature.Length);
                     for (var j = 0; j < feature.Length; j++)

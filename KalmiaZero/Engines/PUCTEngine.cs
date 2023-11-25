@@ -226,7 +226,15 @@ namespace KalmiaZero.Engines
 
         public override void Analyze(int numMoves)
         {
-            // TODO: 探索のデバッグ後に実装.
+            StopIfPondering();
+
+            if (this.Position.CanPass)
+            {
+                EndAnalysis();
+                return;
+            }
+
+            AnalyzeMoves();
         }
 
         public override bool StopThinking(int timeoutMs)
@@ -325,8 +333,40 @@ namespace KalmiaZero.Engines
                 if (searchInfo is null)
                     return;
 
+                Console.Error.WriteLine(status);
                 WriteLog(SearchInfoToString(searchInfo));
                 SendMove(SelectMove(searchInfo));
+            }
+        }
+
+        void AnalyzeMoves()
+        {
+            Debug.Assert(this.tree is not null);
+
+            WriteLog("Start search.\n");
+
+            this.tree.SearchInfoSendIntervalCs = (int)this.Options["show_search_info_interval_cs"].CurrentValue;
+            this.tree.EnableEarlyStopping = false;
+            uint numPlayouts = (uint)this.Options["num_playouts"].CurrentValue;
+            this.searchTask = this.tree.SearchAsync(numPlayouts, int.MaxValue / 10, 0, searchEndCallback);
+
+            void searchEndCallback(SearchEndStatus status)
+            {
+                WriteLog($"{status}.\n");
+                WriteLog("End Search.");
+
+                var searchInfo = this.tree.CollectSearchInfo();
+
+                if (searchInfo is not null)
+                {
+                    WriteLog(SearchInfoToString(searchInfo));
+                    SendSearchInfo(searchInfo);
+                }
+
+                if (this.Options["enable_early_stopping"].CurrentValue)
+                    this.tree.EnableEarlyStopping = true;
+
+                EndAnalysis();
             }
         }
 
@@ -456,12 +496,6 @@ namespace KalmiaZero.Engines
 
         void OnValueFuncWeightsPathSpecified(object? sender, dynamic e)
         {
-            if (this.State == EngineState.NotReady)
-            {
-                SendErrorMessage($"Cannot set the value of \"value_func_weights_path\" because engine is not ready state.");
-                return;
-            }
-
             string path = e;
 
             if (!File.Exists(path))
@@ -469,6 +503,9 @@ namespace KalmiaZero.Engines
                 SendErrorMessage($"Cannot find a weights file of value function at \"{path}\".");
                 return;
             }
+
+            if (this.State == EngineState.NotReady)
+                return;
 
             try
             {
