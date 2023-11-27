@@ -38,6 +38,7 @@ namespace KalmiaZero_Test.Evaluation
                 for (var i = 0; i < expectedW.Length; i++)
                     Assert.AreEqual(expectedW[i], actualW[i], DELTA);
             }
+            Assert.AreEqual(valueFunc.Bias, loaded.Bias, DELTA);    
 
             File.Delete(fileName);
         }

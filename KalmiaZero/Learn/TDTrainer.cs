@@ -149,6 +149,7 @@ namespace KalmiaZero.Learn
         {
             this.logger.WriteLine($"ExplorationRate: {explorationRate}");
             this.logger.WriteLine($"MeanLearningRate: {CalcMeanLearningRate()}");
+            this.logger.WriteLine($"Bias: {this.valueFunc.Bias}");
         }
 
         WeightType CalcMeanLearningRate()

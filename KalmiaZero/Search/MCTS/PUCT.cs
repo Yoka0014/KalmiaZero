@@ -19,13 +19,13 @@ namespace KalmiaZero.Search.MCTS
     static class PUCTConstantOptions
     {
         // cite: https://doi.org/10.1145/3293475.3293486
-        public const bool ENABLE_EXACT_WIN_MCTS = false;
+        public const bool ENABLE_EXACT_WIN_MCTS = true;
 
         public const bool ENABLE_SINGLE_THREAD_MODE = false;
 
         public const bool USE_UNIFORM_POLICY = false;
         public const float PUCT_FACTOR = 1.0f;
-        public const uint VIRTUAL_LOSS = 3;
+        public const uint VIRTUAL_LOSS = 1;
     }
 
     public class MoveEvaluation
@@ -592,7 +592,8 @@ namespace KalmiaZero.Search.MCTS
             Edge[] edges = this.root.Edges;
             var maxIdx = 0;
             var maxScore = float.NegativeInfinity;
-            var sqrtSum = MathF.Sqrt(this.root.VisitCount + EPSILON);
+            var visitSum = this.root.VisitCount;
+            var sqrtVisitSum = MathF.Sqrt(visitSum + EPSILON);
 
             var lossCount = 0;
             var drawCount = 0;
@@ -620,7 +621,7 @@ namespace KalmiaZero.Search.MCTS
 
                 // calculate PUCB score.
                 var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
-                var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtSum / (1.0f + edge.VisitCount);
+                var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtVisitSum / (1.0f + edge.VisitCount);
                 var score = q + u;
 
                 if (score > maxScore)
@@ -647,7 +648,8 @@ namespace KalmiaZero.Search.MCTS
             Edge[] edges = parent.Edges;
             var maxIdx = 0;
             var maxScore = float.NegativeInfinity;
-            var sqrtSum = MathF.Sqrt(parent.VisitCount + EPSILON);
+            var visitSum = parent.VisitCount;
+            var sqrtVisitSum = MathF.Sqrt(visitSum + EPSILON);
 
             var drawCount = 0;
             var lossCount = 0;
@@ -676,8 +678,9 @@ namespace KalmiaZero.Search.MCTS
 
                 // calculate PUCB score.
                 var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
-                var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtSum / (1.0f + edge.VisitCount);
+                var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtVisitSum / (1.0f + edge.VisitCount);
                 var score = q + u;
+                Debug.Assert(!float.IsNaN(score));
 
                 if (score > maxScore)
                 {
@@ -706,11 +709,14 @@ namespace KalmiaZero.Search.MCTS
             {
                 ref var edge = ref edges[i];
 
-                if (edge.IsWin)
-                    return i;
+                if (ENABLE_EXACT_WIN_MCTS)
+                {
+                    if (edge.IsWin)
+                        return i;
 
-                if (edge.IsLoss)
-                    continue;
+                    if (edge.IsLoss)
+                        continue;
+                }
 
                 if (edge.PriorTo(ref edges[maxIdx]))
                     maxIdx = i;

@@ -445,6 +445,7 @@ namespace KalmiaZero.Engines
 
                 multiPV.Add(new MultiPVItem(childEval.PV.ToArray())
                 {
+                    Depth = childEval.PV.Length,
                     NodeCount = childEval.PlayoutCount,
                     EvalScore = childEval.ExpectedReward * 100.0,
                     EvalScoreType = EvalScoreType.WinRate

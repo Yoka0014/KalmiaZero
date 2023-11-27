@@ -297,7 +297,7 @@ namespace KalmiaZero.Evaluation
 
         WeightType[][] PackWeights()
         {
-            var packedWeights = (from _ in Enumerable.Range(0, Weights.Length) select new List<WeightType>()).ToArray();
+            var packedWeights = (from _ in Enumerable.Range(0, this.NTuples.Length) select new List<WeightType>()).ToArray();
             var numPossibleFeatures = this.NTuples.NumPossibleFeatures;
             for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
             {
