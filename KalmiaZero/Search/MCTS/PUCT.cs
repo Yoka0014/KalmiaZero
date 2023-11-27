@@ -692,7 +692,7 @@ namespace KalmiaZero.Search.MCTS
             if (ENABLE_EXACT_WIN_MCTS)
             {
                 if (lossCount + drawCount == edges.Length)
-                    edgeToParent.Label = (drawCount != 0) ? EdgeLabel.Draw : EdgeLabel.Loss;
+                    edgeToParent.Label = (drawCount != 0) ? EdgeLabel.Draw : EdgeLabel.Win;
             }
 
             return maxIdx;
