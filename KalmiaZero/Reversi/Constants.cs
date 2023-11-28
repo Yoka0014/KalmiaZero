@@ -5,6 +5,6 @@
         public const int BOARD_SIZE = 8;
         public const int NUM_SQUARES = BOARD_SIZE * BOARD_SIZE;
         public const int MAX_NUM_MOVES = 33;
-        public const bool ENABLE_LOSS_IS_WIN_MODE = false;
+        public const bool ENABLE_WIN_BY_LOSING = false;
     }
 }

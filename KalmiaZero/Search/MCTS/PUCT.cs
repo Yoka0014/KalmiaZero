@@ -535,6 +535,9 @@ namespace KalmiaZero.Search.MCTS
                         lockTaken = false;
 
                         reward = VisitNode<True>(threadID, ref game, childNode, ref edges[0]);
+
+                        if (edges[0].IsProved)
+                            edgeToNode.Label = InverseEdgeLabel(edges[0].Label);
                     }
 
                     UpdatePassNodeStats(node, ref edges[0], reward);
@@ -680,7 +683,6 @@ namespace KalmiaZero.Search.MCTS
                 var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
                 var u = PUCT_FACTOR * (float)edge.PolicyProb * sqrtVisitSum / (1.0f + edge.VisitCount);
                 var score = q + u;
-                Debug.Assert(!float.IsNaN(score));
 
                 if (score > maxScore)
                 {
@@ -780,6 +782,15 @@ namespace KalmiaZero.Search.MCTS
             Interlocked.Increment(ref parent.VisitCount);
             Interlocked.Increment(ref childEdge.VisitCount);
             AtomicOperations.Add(ref childEdge.RewardSum, reward);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static EdgeLabel InverseEdgeLabel(EdgeLabel label)
+        {
+            if ((label & EdgeLabel.Proved) == 0)
+                return label;
+
+            return (EdgeLabel)TO_OPPONENT_GAME_RESULT[(int)(label ^ EdgeLabel.Proved)] | EdgeLabel.Proved;
         }
     }
 }

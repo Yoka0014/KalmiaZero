@@ -83,7 +83,7 @@ namespace KalmiaZero
                 var nTuples = new NTuples(nTupleInfos);
                 valueFunc = new ValueFunction<float>(nTuples);
             }
-            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 10000 });
+            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 100000000, SaveWeightsInterval = 10000000 });
             sw.Start();
             tdTrainer.Train();
             sw.Stop();
