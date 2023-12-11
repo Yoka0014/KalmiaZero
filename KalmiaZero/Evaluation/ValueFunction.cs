@@ -19,7 +19,7 @@ namespace KalmiaZero.Evaluation
         const string LABEL_INVERSED = "oreZaimlaK";
         const int LABEL_SIZE = 10;
 
-        public NTuples NTuples { get; }
+        public NTupleGroup NTuples { get; }
         public WeightType Bias { get => this.bias; set => this.bias = value; }
         public ref WeightType BiasRef { get => ref this.bias; }
         WeightType bias;
@@ -31,7 +31,7 @@ namespace KalmiaZero.Evaluation
         readonly int[] discColorOffset;
         readonly int[] nTupleOffset;
 
-        public ValueFunction(NTuples nTuples)
+        public ValueFunction(NTupleGroup nTuples)
         {
             this.NTuples = nTuples;
             this.Weights = new WeightType[2 * nTuples.NumPossibleFeatures.Sum()];
@@ -81,7 +81,7 @@ namespace KalmiaZero.Evaluation
                 nTuples[i] = new NTupleInfo(coords);
             }
 
-            var valueFunc = new ValueFunction<WeightType>(new NTuples(nTuples));
+            var valueFunc = new ValueFunction<WeightType>(new NTupleGroup(nTuples));
 
             // load weights
             fs.Read(buffer[..sizeof(int)], swapBytes);

@@ -16,9 +16,9 @@ namespace KalmiaZero.Search
         readonly Move[] moves = new Move[Constants.MAX_NUM_MOVES];
         int numMoves = 0;
 
-        public GameInfo(NTuples nTuples) : this(new Position(), nTuples) { }
+        public GameInfo(NTupleGroup nTuples) : this(new Position(), nTuples) { }
 
-        public GameInfo(Position pos, NTuples nTuples)
+        public GameInfo(Position pos, NTupleGroup nTuples)
         {
             this.Position = pos;
             InitMoves();

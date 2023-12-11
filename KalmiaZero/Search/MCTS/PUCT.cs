@@ -43,6 +43,21 @@ namespace KalmiaZero.Search.MCTS
 
         public bool PriorTo(MoveEvaluation moveEval)
         {
+            if (this.GameResult != GameResult.NotOver)
+            {
+                if (this.GameResult == GameResult.Win)
+                    return true;
+
+                if (this.GameResult == GameResult.Loss)
+                    return false;
+
+                if (this.GameResult == GameResult.Draw)
+                {
+                    if (moveEval.GameResult == GameResult.Loss || moveEval.GameResult == GameResult.Draw)
+                        return true;
+                }
+            }
+
             var diff = (long)this.PlayoutCount - moveEval.PlayoutCount;
             if (diff != 0)
                 return diff > 0;
@@ -147,7 +162,7 @@ namespace KalmiaZero.Search.MCTS
             this.rootState = pos;
             this.root = new Node();
             InitRootChildNodes();
-            rootEdgeLabel = EdgeLabel.NotProved;
+            this.rootEdgeLabel = EdgeLabel.NotProved;
             Array.Clear(this.nodeCountPerThread);
         }
 
@@ -166,6 +181,7 @@ namespace KalmiaZero.Search.MCTS
                     this.rootState.Update(ref edges[i].Move);
                     this.root = this.root.ChildNodes[i];
                     InitRootChildNodes();
+                    this.rootEdgeLabel = edges[i].Label;
                     Array.Clear(this.nodeCountPerThread);
                     return true;
                 }
@@ -327,7 +343,7 @@ namespace KalmiaZero.Search.MCTS
                 return true;
             }
 
-            if (this.rootEdgeLabel == EdgeLabel.Proved)
+            if ((this.rootEdgeLabel & EdgeLabel.Proved) != 0)
             {
                 endStatus = SearchEndStatus.Proved;
                 return true;

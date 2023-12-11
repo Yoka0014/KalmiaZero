@@ -27,11 +27,98 @@ namespace KalmiaZero.Learn
         public int NumNTuples { get; init; } = 12;
         public SupervisedTrainerConfig<WeightType> SLConfig { get; init; } = new() { NumEpoch = 20 };
         public int NumThreads { get; init; } = Environment.ProcessorCount;
-        public Random Random { get; init; } = new (Random.Shared.Next());
+        public Random Random { get; init; } = new(Random.Shared.Next());
 
         public string WorkDir { get; init; } = Environment.CurrentDirectory;
         public string PoolFileName { get; init; } = "pool";
         public string FitnessHistroyFileName { get; init; } = "fitness_histroy";
+    }
+
+    public struct Individual : IComparable<Individual>
+    {
+        const string LABEL = "KalmiaZero_Pool";
+        const string LABEL_INVERSED = "looP_oreZaimlaK";
+        const int LABEL_SIZE = 15;
+
+        public float[] Chromosome { get; private set; }
+        public float Fitness { get; set; }
+
+        public Individual(int chromosomeSize) : this(chromosomeSize, Random.Shared) { }
+
+        public Individual(int chromosomeSize, Random rand)
+        {
+            this.Chromosome = Enumerable.Range(0, chromosomeSize).Select(_ => rand.NextSingle()).ToArray();
+            this.Fitness = float.NegativeInfinity;
+        }
+
+        public Individual(ref Individual src)
+        {
+            this.Fitness = src.Fitness;
+            this.Chromosome = new float[src.Chromosome.Length];
+            Buffer.BlockCopy(src.Chromosome, 0, this.Chromosome, 0, sizeof(float) * this.Chromosome.Length);
+        }
+
+        public Individual(Stream stream, bool swapBytes)
+        {
+            const int BUFFER_SIZE = 4;
+
+            Span<byte> buffer = stackalloc byte[BUFFER_SIZE];
+            stream.Read(buffer[..sizeof(int)], swapBytes);
+            this.Chromosome = new float[BitConverter.ToInt32(buffer)];
+            for (var i = 0; i < this.Chromosome.Length; i++)
+            {
+                stream.Read(buffer[..sizeof(float)], swapBytes);
+                this.Chromosome[i] = BitConverter.ToSingle(buffer);
+            }
+
+            stream.Read(buffer[..sizeof(float)], swapBytes);
+            this.Fitness = BitConverter.ToSingle(buffer);
+        }
+
+        public readonly void WriteTo(Stream stream)
+        {
+            stream.Write(BitConverter.GetBytes(this.Chromosome.Length));
+            foreach (var gene in this.Chromosome)
+                stream.Write(BitConverter.GetBytes(gene));
+            stream.Write(BitConverter.GetBytes(this.Fitness));
+        }
+
+        public readonly int CompareTo(Individual other) => Math.Sign(other.Fitness - this.Fitness);
+
+        /**
+         *  format of file
+         *  
+         *  offset = 0: LABEL
+         *  offset = LABEL_SIZE + 8: POPULATION_SIZE
+         *  offset = LABEL_SIZE + 12: INDIVISUAL[0]
+         *  ...
+         **/
+        public static Individual[] LoadPoolFromFile(string path)
+        {
+            Span<byte> buffer = stackalloc byte[LABEL_SIZE];
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+            fs.Read(buffer);
+            var label = Encoding.ASCII.GetString(buffer);
+            var swapBytes = label == LABEL_INVERSED;
+
+            if (!swapBytes && label != LABEL)
+                throw new InvalidDataException($"The format of \"{path}\" is invalid.");
+
+            fs.Read(buffer[..sizeof(int)], swapBytes);
+            var populationSize = BitConverter.ToInt32(buffer);
+            return Enumerable.Range(0, populationSize).Select(_ => new Individual(fs, swapBytes)).ToArray();
+        }
+
+        public static void SavePoolAt(Individual[] pool, string path)
+        {
+            Span<byte> buffer = stackalloc byte[LABEL_SIZE];
+            using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+            Encoding.ASCII.GetBytes(LABEL).CopyTo(buffer);
+            fs.Write(buffer);
+            fs.Write(BitConverter.GetBytes(pool.Length));
+            for (var i = 0; i < pool.Length; i++)
+                pool[i].WriteTo(fs);
+        }
     }
 
     public class GA<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
@@ -54,7 +141,7 @@ namespace KalmiaZero.Learn
 
         readonly List<(float best, float worst, float median, float average)> fitnessHistory = new();
 
-        public GA(GAConfig<WeightType> config) 
+        public GA(GAConfig<WeightType> config)
         {
             this.CONFIG = config;
             this.SL_CONFIG = config.SLConfig;
@@ -69,9 +156,20 @@ namespace KalmiaZero.Learn
             this.NUM_NTUPLES = config.NumNTuples;
             this.RAND = config.Random;
             this.PARALLEL_OPTIONS = new ParallelOptions { MaxDegreeOfParallelism = config.NumThreads };
-            
+
             this.pool = new Individual[this.POPULATION_SIZE];
             this.nextPool = new Individual[this.POPULATION_SIZE];
+        }
+
+
+        public Individual[] GetCurrentPool() => this.pool.Select(i => new Individual(ref i)).ToArray();
+
+        public NTupleGroup[] DecodeCurrentPool()
+        {
+            var ntupleGroups = new NTupleGroup[this.pool.Length];
+            for (var i = 0; i < this.pool.Length; i++)
+                ntupleGroups[i] = new NTupleGroup(DecodeChromosome(this.pool[i].Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
+            return ntupleGroups;
         }
 
         public void Train(TrainData[] trainData, TrainData[] testData, int numGenerations)
@@ -80,7 +178,7 @@ namespace KalmiaZero.Learn
         public void Train(string poolPath, TrainData[] trainData, TrainData[] testData, int numGenerations)
             => Train(Individual.LoadPoolFromFile(poolPath), trainData, testData, numGenerations);
 
-        void Train(Individual[] initialPool, TrainData[] trainData, TrainData[] testData, int numGenerations)
+        public void Train(Individual[] initialPool, TrainData[] trainData, TrainData[] testData, int numGenerations)
         {
             Array.Copy(initialPool, this.pool, this.pool.Length);
             Array.Copy(initialPool, this.nextPool, this.nextPool.Length);
@@ -88,13 +186,20 @@ namespace KalmiaZero.Learn
             for (var i = 0; i < this.pool.Length; i++)
                 this.pool[i].Fitness = float.NegativeInfinity;
 
+            TrainWithCurrentPool(trainData, testData, numGenerations);
+        }
+
+        public void TrainWithCurrentPool(TrainData[] trainData, TrainData[] testData, int numGenerations)
+        {
             for (var gen = 0; gen < numGenerations; gen++)
             {
                 Console.WriteLine($"Generation: {gen}");
 
                 EvaluatePool(trainData, testData);
 
-                this.fitnessHistory.Add((this.pool[0].Fitness, this.pool[^1].Fitness, this.pool[this.pool.Length / 2].Fitness, this.pool.Average(p => p.Fitness)));
+                var poolSplited = this.pool[..^this.NUM_MUTANTS];
+                this.fitnessHistory.Add((this.pool[0].Fitness, poolSplited[^1].Fitness,
+                                        poolSplited[poolSplited.Length / 2].Fitness, poolSplited.Average(p => p.Fitness)));
 
                 var (best, worst, median, average) = this.fitnessHistory[^1];
                 Console.WriteLine($"\nBestFitness: {best}");
@@ -116,6 +221,9 @@ namespace KalmiaZero.Learn
                 (this.pool, this.nextPool) = (this.nextPool, this.pool);
                 Console.WriteLine();
             }
+
+            Console.WriteLine("Final evaluation.");
+            EvaluatePool(trainData, testData);
         }
 
         void SaveFitnessHistory()
@@ -124,7 +232,7 @@ namespace KalmiaZero.Learn
             var worstSb = new StringBuilder("[");
             var medianSb = new StringBuilder("[");
             var averageSb = new StringBuilder("[");
-            foreach((var best, var worst, var median, var average) in this.fitnessHistory)
+            foreach ((var best, var worst, var median, var average) in this.fitnessHistory)
             {
                 bestSb.Append(best).Append(", ");
                 worstSb.Append(worst).Append(", ");
@@ -187,14 +295,14 @@ namespace KalmiaZero.Learn
         {
             (var eliteChrom, var nonEliteChrom) = (eliteParent.Chromosome, nonEliteParent.Chromosome);
             var childChrom = child.Chromosome;
-            for(var i = 0; i < childChrom.Length; i++)
+            for (var i = 0; i < childChrom.Length; i++)
                 childChrom[i] = (this.RAND.NextDouble() < this.ELITE_INHERITANCE_PROB) ? eliteChrom[i] : nonEliteChrom[i];
             child.Fitness = float.NegativeInfinity;
         }
 
         void EvaluateIndividual(ref Individual individual, TrainData[] trainData, TrainData[] testData, int id)
         {
-            var nTuples = new NTuples(DecodeChromosome(individual.Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
+            var nTuples = new NTupleGroup(DecodeChromosome(individual.Chromosome, this.NTUPLE_SIZE, this.NUM_NTUPLES));
             var valueFunc = new ValueFunction<WeightType>(nTuples);
             var slTrainer = new SupervisedTrainer<WeightType>($"INDV_{id}", valueFunc, this.SL_CONFIG, Stream.Null);
             slTrainer.Train(trainData, Array.Empty<TrainData>(), saveWeights: false, saveLossHistroy: false);
@@ -260,18 +368,23 @@ namespace KalmiaZero.Learn
             return (score > 0) ? WeightType.One : WeightType.Zero;
         }
 
-        public static NTuples[] DecodePool(string poolPath, int nTupleSize, int numNTuples, int numIndividual=-1)
+        public static NTupleGroup[] DecodePool(string poolPath, int nTupleSize, int numNTuples, int numIndividuals = -1)
         {
             var pool = Individual.LoadPoolFromFile(poolPath);
+            return DecodePool(pool, nTupleSize, numNTuples, numIndividuals);
+        }
+
+        public static NTupleGroup[] DecodePool(Individual[] pool, int nTupleSize, int numNTuples, int numIndividuals = -1)
+        {
             Array.Sort(pool);
-            if (numIndividual == -1)
-                numIndividual = pool.Length;
+            if (numIndividuals == -1)
+                numIndividuals = pool.Length;
 
-            var nTuplesSet = new NTuples[numIndividual];
-            for (var i = 0; i < nTuplesSet.Length; i++)
-                nTuplesSet[i] = new NTuples(DecodeChromosome(pool[i].Chromosome, nTupleSize, numNTuples));
+            var nTuplesGroup = new NTupleGroup[numIndividuals];
+            for (var i = 0; i < nTuplesGroup.Length; i++)
+                nTuplesGroup[i] = new NTupleGroup(DecodeChromosome(pool[i].Chromosome, nTupleSize, numNTuples));
 
-            return nTuplesSet;
+            return nTuplesGroup;
         }
 
         static NTupleInfo[] DecodeChromosome(float[] chromosome, int nTupleSize, int numNTuples)
@@ -296,7 +409,7 @@ namespace KalmiaZero.Learn
                 Array.Fill(coords, BoardCoordinate.Null);
                 coords[0] = (BoardCoordinate)minIdx;
                 adjCoords.Clear();
-                for(var i = 1; i < nTupleSize; i++)
+                for (var i = 1; i < nTupleSize; i++)
                 {
                     adjCoords.AddRange(Reversi.Utils.GetAdjacent8Squares(coords[i - 1]));
                     adjCoords.RemoveAll(coords[..i].Contains);
@@ -319,85 +432,6 @@ namespace KalmiaZero.Learn
             }
 
             return nTuples;
-        }
-
-        struct Individual : IComparable<Individual> 
-        {
-            const string LABEL = "KalmiaZero_Pool";
-            const string LABEL_INVERSED = "looP_oreZaimlaK";
-            const int LABEL_SIZE = 15;
-
-            public float[] Chromosome;
-            public float Fitness;
-            
-            public Individual(int chromosomeSize) : this(chromosomeSize, Random.Shared) { }
-
-            public Individual(int chromosomeSize, Random rand)
-            {
-                this.Chromosome = Enumerable.Range(0, chromosomeSize).Select(_ => rand.NextSingle()).ToArray();
-                this.Fitness = float.NegativeInfinity;
-            }
-
-            public Individual(Stream stream, bool swapBytes)
-            {
-                const int BUFFER_SIZE = 4;
-
-                Span<byte> buffer = stackalloc byte[BUFFER_SIZE];
-                stream.Read(buffer[..sizeof(int)], swapBytes);
-                this.Chromosome = new float[BitConverter.ToInt32(buffer)];
-                for(var i = 0; i < this.Chromosome.Length; i++)
-                {
-                    stream.Read(buffer[..sizeof(float)], swapBytes);
-                    this.Chromosome[i] = BitConverter.ToSingle(buffer);
-                }
-
-                stream.Read(buffer[..sizeof(float)], swapBytes);
-                this.Fitness = BitConverter.ToSingle(buffer);
-            }
-
-            public readonly void WriteTo(Stream stream)
-            {
-                stream.Write(BitConverter.GetBytes(this.Chromosome.Length));
-                foreach (var gene in this.Chromosome)
-                    stream.Write(BitConverter.GetBytes(gene));
-                stream.Write(BitConverter.GetBytes(this.Fitness));
-            }
-
-            public readonly int CompareTo(Individual other) => Math.Sign(other.Fitness - this.Fitness);
-
-            /**
-             *  format of file
-             *  
-             *  offset = 0: LABEL
-             *  offset = LABEL_SIZE + 1: POPULATION_SIZE
-             *  offset = LABEL_SIZE + 5: INDIVISUAL[0]
-             *  ...
-             **/
-            public static Individual[] LoadPoolFromFile(string path)
-            {
-                Span<byte> buffer = stackalloc byte[LABEL_SIZE];
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
-                fs.Read(buffer);
-                var label = Encoding.ASCII.GetString(buffer);
-                var swapBytes = label == LABEL_INVERSED;
-
-                if (!swapBytes && label != LABEL)
-                    throw new InvalidDataException($"The format of \"{path}\" is invalid.");
-
-                fs.Read(buffer[..sizeof(int)], swapBytes);
-                return Enumerable.Range(0, BitConverter.ToInt32(buffer)).Select(_ => new Individual(fs, swapBytes)).ToArray();
-            }
-
-            public static void SavePoolAt(Individual[] pool, string path)
-            {
-                Span<byte> buffer = stackalloc byte[LABEL_SIZE];
-                using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-                Encoding.ASCII.GetBytes(LABEL).CopyTo(buffer);
-                fs.Write(buffer);
-                fs.Write(BitConverter.GetBytes(pool.Length));
-                for (var i = 0; i < pool.Length; i++)
-                    pool[i].WriteTo(fs);
-            }
         }
     }
 }

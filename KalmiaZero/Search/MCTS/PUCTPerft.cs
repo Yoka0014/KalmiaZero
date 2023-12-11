@@ -14,6 +14,10 @@ namespace KalmiaZero.Search.MCTS
     {
         public static void Start(ValueFunction<PUCTValueType> valueFunc, int numThreads, uint numPlayouts, int numSamples)
         {
+            Console.WriteLine($"NumPlayouts: {numPlayouts}");
+            Console.WriteLine($"NumThreads: {numThreads}");
+            Console.WriteLine($"NumSamples: {numSamples}");
+
             var rootState = new Position();
             var tree = new PUCT(valueFunc);
             tree.NumThreads = numThreads;

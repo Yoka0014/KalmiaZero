@@ -80,7 +80,7 @@ namespace KalmiaZero.NTuple
 
         public DiscColor SideToMove { get; private set; }
         public int NumNTuples => this.NTuples.Length;
-        public NTuples NTuples { get; }
+        public NTupleGroup NTuples { get; }
 
         public Feature[] Features { get; private set; }  // features[nTupleID]
         readonly FeatureDiff[] featureDiffTable = new FeatureDiff[NUM_SQUARES];
@@ -94,7 +94,7 @@ namespace KalmiaZero.NTuple
         readonly Move[] prevLegalMoves = new Move[MAX_NUM_MOVES];
         int numPrevLegalMoves = 0;
 
-        public PositionFeatureVector(NTuples nTuples)
+        public PositionFeatureVector(NTupleGroup nTuples)
         {
             this.NTuples = nTuples;
             this.Features = new Feature[this.NTuples.Length];
@@ -110,7 +110,7 @@ namespace KalmiaZero.NTuple
 
         PositionFeatureVector()
         {
-            this.NTuples = new NTuples();
+            this.NTuples = new NTupleGroup();
             this.Features = Array.Empty<Feature>();
             this.featureDiffTable = Array.Empty<FeatureDiff>();
             (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);

@@ -20,6 +20,17 @@ namespace KalmiaZero.Learn
         public readonly sbyte TheoreticalScoreDepth { get; }
         public readonly Move[] Moves { get; }
 
+        public TrainData(Position rootPos, IEnumerable<Move> moves, sbyte scoreFromBlack) : this(rootPos, moves, scoreFromBlack, 0, 60) { }
+
+        public TrainData(Position rootPos, IEnumerable<Move> moves, sbyte scoreFromBlack,  sbyte theoreticalScoreFromBlack, sbyte theoreticalScoreDepth)
+        {
+            this.RootPos = rootPos;
+            this.Moves = moves.ToArray();
+            this.ScoreFromBlack = scoreFromBlack;
+            this.TheoreticalScoreFromBlack = theoreticalScoreFromBlack;
+            this.TheoreticalScoreDepth = theoreticalScoreDepth;
+        }
+
         public TrainData(WTHORHeader wtbHeader, WTHORGameRecord game)
         {
             this.TheoreticalScoreDepth = (sbyte)wtbHeader.Depth;

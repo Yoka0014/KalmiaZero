@@ -163,7 +163,7 @@ namespace KalmiaZero.NTuple
         }
     }
 
-    public readonly struct NTuples
+    public readonly struct NTupleGroup
     {
         public readonly ReadOnlySpan<NTupleInfo> Tuples => this.TUPLES;
         public readonly int Length => this.TUPLES.Length;
@@ -176,7 +176,7 @@ namespace KalmiaZero.NTuple
         readonly FeatureType[][] TO_OPPONENT_FEATURE;
         readonly FeatureType[][] TO_MIRRORED_FEATURE;
 
-        public NTuples(Span<NTupleInfo> tuples)
+        public NTupleGroup(Span<NTupleInfo> tuples)
         {
             this.TUPLES = tuples.ToArray();
 
@@ -192,7 +192,7 @@ namespace KalmiaZero.NTuple
             InitMirroredFeatureTable();
         }
 
-        public NTuples()
+        public NTupleGroup()
         {
             this.TUPLES = Array.Empty<NTupleInfo>();
             this.POW_TABLE = Array.Empty<int>();

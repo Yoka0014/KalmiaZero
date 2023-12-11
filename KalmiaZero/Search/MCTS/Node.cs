@@ -36,7 +36,7 @@ namespace KalmiaZero.Search.MCTS
             if (this.VisitCount == 0)
                 return false;
 
-            var diff = (int)(this.VisitCount - edge.VisitCount);
+            var diff = (long)this.VisitCount - edge.VisitCount;
             if (diff != 0)
                 return diff > 0;
             return this.ExpectedReward > edge.ExpectedReward;

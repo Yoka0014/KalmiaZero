@@ -97,7 +97,7 @@ namespace KalmiaZero.Learn
                     Directory.CreateDirectory(dir);
 
                 var tuples = (from _ in Enumerable.Range(0, numTuples) select new NTupleInfo(tupleSize)).ToArray();
-                var nTuples = new NTuples(tuples);
+                var nTuples = new NTupleGroup(tuples);
                 var valueFunc = new ValueFunction<WeightType>(nTuples);
                 new TDTrainer<WeightType>($"AG-{agentID}", valueFunc, config with { WorkDir = dir }).Train();
             });
@@ -324,7 +324,7 @@ namespace KalmiaZero.Learn
             readonly PositionFeatureVector[] posFeatureVecs;
             int loc = 0;
 
-            public PastStatesBuffer(int capasity, NTuples nTuples)
+            public PastStatesBuffer(int capasity, NTupleGroup nTuples)
             {
                 this.posFeatureVecs = Enumerable.Range(0, capasity).Select(_ => new PositionFeatureVector(nTuples)).ToArray();
             }

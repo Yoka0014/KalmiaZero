@@ -19,7 +19,7 @@ namespace KalmiaZero_Test.NTuple
             const int NTUPLE_SIZE = 7;
 
             var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var nTuples = new NTuples(tuples);
+            var nTuples = new NTupleGroup(tuples);
             var expectedPf = new PositionFeatureVector(nTuples);
             var actualPf = new PositionFeatureVector(nTuples);   
 
@@ -75,7 +75,7 @@ namespace KalmiaZero_Test.NTuple
             const int NTUPLE_SIZE = 7;
 
             var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var nTuples = new NTuples(tuples);
+            var nTuples = new NTupleGroup(tuples);
             var expectedPf = new PositionFeatureVector(nTuples);
             var actualPf = new PositionFeatureVector(nTuples); 
             

@@ -1,11 +1,13 @@
 ﻿//#define VALUE_GREEDY_ENGINE
-#define PUCT_ENGINE
+//#define PUCT_ENGINE
+//#define PUCT_PERFT
 //#define SL
 //#define RL
 //#define MULTI_RL
 //#define MT_RL
 //#define SL_GA
-//#define OUT_GA_RES
+//#define TD_GA
+#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
 //#define DEV_TEST
 
@@ -23,6 +25,9 @@ using KalmiaZero.Search;
 using KalmiaZero.NTuple;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Threading;
 
 namespace KalmiaZero
 {
@@ -52,6 +57,10 @@ namespace KalmiaZero
 
             var nboard = new NBoard();
             nboard.Mainloop(engine);
+#endif
+
+#if PUCT_PERFT
+            PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), Environment.ProcessorCount, 500000, 100);
 #endif
 
 #if SL
@@ -138,10 +147,22 @@ namespace KalmiaZero
             Console.WriteLine($"{sw.ElapsedMilliseconds}[ms]");
 #endif
 
+#if TD_GA
+            var sw = new Stopwatch();
+            var ga = new TDGA<float>(new TDGAConfig<float>());
+            sw.Start();
+            if (args.Length > 0)
+                ga.Train(args[0], 1000);
+            else
+                ga.Train(1000);
+            sw.Stop();
+            Console.WriteLine($"{sw.ElapsedMilliseconds}[ms]");
+#endif
+
 #if OUT_GA_RES
-            var nTuplesSet = SupervisedGA<float>.DecodePool(args[0], 10, 12, 10);
+            var nTuplesGroups = GA<float>.DecodePool(args[0], 10, 12, 10);
             using var sw = new StreamWriter("ntuples.txt");
-            var nTuples = nTuplesSet[0].Tuples;
+            var nTuples = nTuplesGroups[0].Tuples;
             foreach(var nTuple in nTuples)
             {
                 sw.Write('[');
@@ -170,8 +191,83 @@ namespace KalmiaZero
 
         static void DevTest()
         {
-            var vf = ValueFunction<float>.LoadFromFile("params/value_func_weights_ga.bin");
-            Console.WriteLine(vf.NTuples.Tuples[0]);
+            using var sw = new StreamWriter("games.txt");
+            var rand = new Random();
+            Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
+            Span<Move> nextMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
+            Span<float> moveValues = stackalloc float[Constants.MAX_NUM_MOVES];
+            Span<int> moveCandidates = stackalloc int[Constants.MAX_NUM_MOVES];
+
+            var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
+            var oppValueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
+            for (var game = 0; game < 10000; game++)
+            {
+                var pos = new Position();
+                var moveHistory = new List<Move>();
+                var featureVec = new PositionFeatureVector(valueFunc.NTuples);
+                var oppFeatureVec = new PositionFeatureVector(oppValueFunc.NTuples);
+                var numCandidates = 0;
+
+                var numMoves = pos.GetNextMoves(ref moves);
+                featureVec.Init(ref pos, moves[..numMoves]);
+                oppFeatureVec.Init(ref pos, moves[..numMoves]);
+
+                var passCount = 0;
+                while (passCount < 2)
+                {
+                    if (numMoves == 0)
+                    {
+                        pos.Pass();
+                        numMoves = pos.GetNextMoves(ref moves);
+                        featureVec.Pass(moves[..numMoves]);
+                        oppFeatureVec.Pass(moves[..numMoves]);
+                        moveHistory.Add(Move.Pass);
+                        passCount++;
+                        (featureVec, oppFeatureVec) = (oppFeatureVec, featureVec);
+                        (valueFunc, oppValueFunc) = (oppValueFunc, valueFunc);
+                        continue;
+                    }
+
+                    passCount = 0;
+                    var maxValue = float.NegativeInfinity;
+                    for (var i = 0; i < numMoves; i++)
+                    {
+                        ref var move = ref moves[i];
+                        pos.GenerateMove(ref move);
+                        pos.Update(ref move);
+                        var numNextMoves = pos.GetNextMoves(ref nextMoves);
+                        featureVec.Update(ref move, nextMoves[..numNextMoves]);
+
+                        moveValues[i] = 1.0f - valueFunc.Predict(featureVec);
+                        if (moveValues[i] > maxValue)
+                            maxValue = moveValues[i];
+
+                        pos.Undo(ref move);
+                        featureVec.Undo(ref move, moves[..numMoves]);
+                    }
+
+                    numCandidates = 0;
+                    for (var i = 0; i < numMoves; i++)
+                        if (float.Abs(moveValues[i] - maxValue) <= 0.05f)
+                            moveCandidates[numCandidates++] = i;
+
+                    var moveChosen = moves[moveCandidates[rand.Next(numCandidates)]];
+                    pos.GenerateMove(ref moveChosen);
+                    pos.Update(ref moveChosen);
+                    numMoves = pos.GetNextMoves(ref moves);
+                    featureVec.Update(ref moveChosen, moves[..numMoves]);
+                    oppFeatureVec.Update(ref moveChosen, moves[..numMoves]);
+                    moveHistory.Add(moveChosen);
+
+                    (featureVec, oppFeatureVec) = (oppFeatureVec, featureVec);
+                    (valueFunc, oppValueFunc) = (oppValueFunc, valueFunc);
+                }
+
+                foreach (var move in moveHistory)
+                    if (move.Coord != BoardCoordinate.Pass)
+                        sw.Write(move.Coord);
+                sw.WriteLine();
+            }
         }
     }
 }

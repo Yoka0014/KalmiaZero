@@ -19,7 +19,7 @@ namespace KalmiaZero_Test.Evaluation
             const int NTUPLE_SIZE = 7;
 
             var nTuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var valueFunc = new ValueFunction<double>(new NTuples(nTuples));
+            var valueFunc = new ValueFunction<double>(new NTupleGroup(nTuples));
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
             var fileName = Path.GetRandomFileName();
@@ -51,7 +51,7 @@ namespace KalmiaZero_Test.Evaluation
             const float DELTA = 1.0e-6f;
 
             var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var nTuples = new NTuples(tuples);
+            var nTuples = new NTupleGroup(tuples);
             var valueFunc = new ValueFunction<float>(nTuples);
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
@@ -128,7 +128,7 @@ namespace KalmiaZero_Test.Evaluation
             const float DELTA = 1.0e-6f;
 
             var tuples = (from _ in Enumerable.Range(0, NUM_NTUPLES) select new NTupleInfo(NTUPLE_SIZE)).ToArray();
-            var nTuples = new NTuples(tuples);
+            var nTuples = new NTupleGroup(tuples);
             var valueFunc = new ValueFunction<float>(nTuples);
             valueFunc.InitWeightsWithUniformRand(0.0f, 0.001f);
 
