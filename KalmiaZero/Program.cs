@@ -7,9 +7,9 @@
 //#define MT_RL
 //#define SL_GA
 //#define TD_GA
-#define OUT_GA_RES
+//#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
-//#define DEV_TEST
+#define DEV_TEST
 
 using System;
 using KalmiaZero.Reversi;
@@ -149,7 +149,7 @@ namespace KalmiaZero
 
 #if TD_GA
             var sw = new Stopwatch();
-            var ga = new TDGA<float>(new TDGAConfig<float>());
+            var ga = new TDGA<float>(new TDGAConfig<float>() { TDConfig = new TDTrainerConfig<float> { NumEpisodes = 5000000 } });
             sw.Start();
             if (args.Length > 0)
                 ga.Train(args[0], 1000);

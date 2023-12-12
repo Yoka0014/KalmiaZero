@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -109,12 +110,24 @@ namespace KalmiaZero.Learn
 
                 var nTupleGroups = GA<WeightType>.DecodePool(pool, nTupleSize, numNTuples)[..numElites];
 
-                Console.WriteLine($"Start RL.");
+                Console.WriteLine("Start RL.");
                 var valueFuncs = TrainAgents(nTupleGroups);
 
                 Console.WriteLine("Generate games by RL agents.");
                 var trainData = GenerateTrainDataByAgents(this.NUM_TRAIN_DATA, valueFuncs);
                 var testData = GenerateTrainDataByAgents(this.NUM_TEST_DATA, valueFuncs);
+
+                // debug
+                using (var sw = new StreamWriter("train_data.txt"))
+                {
+                    foreach (var data in trainData)
+                    {
+                        foreach (var move in data.Moves)
+                            if (move.Coord != BoardCoordinate.Pass)
+                                sw.Write(move.Coord);
+                        sw.WriteLine();
+                    }
+                }
 
                 Console.WriteLine("Start n-tuple optimization.");
                 var numGens = Math.Min(this.CONFIG.TrainDataUpdateInterval, genLeft);
@@ -223,7 +236,7 @@ namespace KalmiaZero.Learn
 
                 numCandidates = 0;
                 for (var i = 0; i < numMoves; i++)
-                    if (WeightType.Abs(moveValues[i] - maxValue) <= this.CONFIG.TrainDataVariationFactor)
+                    if (maxValue - moveValues[i] <= this.CONFIG.TrainDataVariationFactor)
                         moveCandidates[numCandidates++] = i;
 
                 var moveChosen = moves[moveCandidates[rand.Next(numCandidates)]];

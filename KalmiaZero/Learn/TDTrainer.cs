@@ -137,6 +137,8 @@ namespace KalmiaZero.Learn
                     this.logger.Flush();
                 }
             }
+
+            this.valueFunc.CopyWeightsBlackToWhite();
         }
 
         void WriteLabel()

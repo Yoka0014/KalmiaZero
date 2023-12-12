@@ -215,8 +215,8 @@ namespace KalmiaZero.Learn
                 var nonElites = this.pool.AsSpan(this.NUM_ELITES);
                 elites.CopyTo(this.nextPool);
 
-                GenerateMutants();
                 GenerateChildren(ref elites, ref nonElites);
+                GenerateMutants();
 
                 (this.pool, this.nextPool) = (this.nextPool, this.pool);
                 Console.WriteLine();
@@ -274,7 +274,7 @@ namespace KalmiaZero.Learn
 
         void GenerateMutants()
         {
-            var mutants = this.nextPool.AsSpan(this.NUM_ELITES, this.NUM_MUTANTS);
+            var mutants = this.nextPool.AsSpan(this.nextPool.Length - this.NUM_MUTANTS);
             for (var i = 0; i < mutants.Length; i++)
             {
                 ref var mutant = ref mutants[i];
@@ -286,7 +286,7 @@ namespace KalmiaZero.Learn
 
         void GenerateChildren(ref Span<Individual> elites, ref Span<Individual> nonElites)
         {
-            var children = this.nextPool.AsSpan(this.NUM_ELITES + this.NUM_MUTANTS);
+            var children = this.nextPool.AsSpan(this.NUM_ELITES);
             for (var i = 0; i < children.Length; i++)
                 Crossover(ref elites[this.RAND.Next(elites.Length)], ref nonElites[this.RAND.Next(nonElites.Length)], ref children[i]);
         }
