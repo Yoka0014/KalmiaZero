@@ -1,5 +1,5 @@
 ﻿//#define VALUE_GREEDY_ENGINE
-//#define PUCT_ENGINE
+#define PUCT_ENGINE
 //#define PUCT_PERFT
 //#define SL
 //#define RL
@@ -9,7 +9,7 @@
 //#define TD_GA
 //#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
-#define DEV_TEST
+//#define DEV_TEST
 
 using System;
 using KalmiaZero.Reversi;
@@ -149,7 +149,7 @@ namespace KalmiaZero
 
 #if TD_GA
             var sw = new Stopwatch();
-            var ga = new TDGA<float>(new TDGAConfig<float>() { TDConfig = new TDTrainerConfig<float> { NumEpisodes = 5000000 } });
+            var ga = new TDGA(new TDGAConfig() { TDConfig = new TDTrainerConfig<float> { NumEpisodes = 100 }, NumTrainData = 10000, NumTestData = 100 });
             sw.Start();
             if (args.Length > 0)
                 ga.Train(args[0], 1000);
@@ -191,83 +191,30 @@ namespace KalmiaZero
 
         static void DevTest()
         {
-            using var sw = new StreamWriter("games.txt");
-            var rand = new Random();
-            Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
-            Span<Move> nextMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
-            Span<float> moveValues = stackalloc float[Constants.MAX_NUM_MOVES];
-            Span<int> moveCandidates = stackalloc int[Constants.MAX_NUM_MOVES];
-
-            var valueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
-            var oppValueFunc = ValueFunction<float>.LoadFromFile("params/value_func_weights.bin");
-            for (var game = 0; game < 10000; game++)
+            using var sr = new StreamReader("train_data.txt");
+            var lineCount = 0;
+            while(sr.Peek() != -1)
             {
+                lineCount++;
+                var line = sr.ReadLine();
                 var pos = new Position();
-                var moveHistory = new List<Move>();
-                var featureVec = new PositionFeatureVector(valueFunc.NTuples);
-                var oppFeatureVec = new PositionFeatureVector(oppValueFunc.NTuples);
-                var numCandidates = 0;
-
-                var numMoves = pos.GetNextMoves(ref moves);
-                featureVec.Init(ref pos, moves[..numMoves]);
-                oppFeatureVec.Init(ref pos, moves[..numMoves]);
-
-                var passCount = 0;
-                while (passCount < 2)
+                for(var i = 0; i < line.Length; i += 2)
                 {
-                    if (numMoves == 0)
-                    {
+                    if (pos.CanPass)
                         pos.Pass();
-                        numMoves = pos.GetNextMoves(ref moves);
-                        featureVec.Pass(moves[..numMoves]);
-                        oppFeatureVec.Pass(moves[..numMoves]);
-                        moveHistory.Add(Move.Pass);
-                        passCount++;
-                        (featureVec, oppFeatureVec) = (oppFeatureVec, featureVec);
-                        (valueFunc, oppValueFunc) = (oppValueFunc, valueFunc);
-                        continue;
-                    }
 
-                    passCount = 0;
-                    var maxValue = float.NegativeInfinity;
-                    for (var i = 0; i < numMoves; i++)
+                    var str = line[i..(i + 2)];
+                    var coord = Reversi.Utils.ParseCoordinate(str);
+                    if (!pos.IsLegalMoveAt(coord))
                     {
-                        ref var move = ref moves[i];
-                        pos.GenerateMove(ref move);
-                        pos.Update(ref move);
-                        var numNextMoves = pos.GetNextMoves(ref nextMoves);
-                        featureVec.Update(ref move, nextMoves[..numNextMoves]);
-
-                        moveValues[i] = 1.0f - valueFunc.Predict(featureVec);
-                        if (moveValues[i] > maxValue)
-                            maxValue = moveValues[i];
-
-                        pos.Undo(ref move);
-                        featureVec.Undo(ref move, moves[..numMoves]);
+                        Console.WriteLine($"illegal: {lineCount}");
+                        return;
                     }
-
-                    numCandidates = 0;
-                    for (var i = 0; i < numMoves; i++)
-                        if (float.Abs(moveValues[i] - maxValue) <= 0.05f)
-                            moveCandidates[numCandidates++] = i;
-
-                    var moveChosen = moves[moveCandidates[rand.Next(numCandidates)]];
-                    pos.GenerateMove(ref moveChosen);
-                    pos.Update(ref moveChosen);
-                    numMoves = pos.GetNextMoves(ref moves);
-                    featureVec.Update(ref moveChosen, moves[..numMoves]);
-                    oppFeatureVec.Update(ref moveChosen, moves[..numMoves]);
-                    moveHistory.Add(moveChosen);
-
-                    (featureVec, oppFeatureVec) = (oppFeatureVec, featureVec);
-                    (valueFunc, oppValueFunc) = (oppValueFunc, valueFunc);
+                    var move = pos.GenerateMove(coord);
+                    pos.Update(ref move);
                 }
-
-                foreach (var move in moveHistory)
-                    if (move.Coord != BoardCoordinate.Pass)
-                        sw.Write(move.Coord);
-                sw.WriteLine();
             }
+            Console.WriteLine(lineCount);
         }
     }
 }

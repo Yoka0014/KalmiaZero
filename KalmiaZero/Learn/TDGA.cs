@@ -1,26 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 
 using KalmiaZero.Evaluation;
 using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
+using KalmiaZero.Search.MCTS;
+using KalmiaZero.Utils;
 
 namespace KalmiaZero.Learn
 {
-    public record class TDGAConfig<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
+    public record class TDGAConfig 
     {
-        public TDTrainerConfig<WeightType> TDConfig { get; init; } = new();
-        public GAConfig<WeightType> GAConfig { get; init; } = new();
-        public SupervisedTrainerConfig<WeightType> SLConfig { get; init; } = new() { NumEpoch = 20 };
+        public TDTrainerConfig<PUCTValueType> TDConfig { get; init; } = new();
+        public GAConfig<PUCTValueType> GAConfig { get; init; } = new();
+        public SupervisedTrainerConfig<PUCTValueType> SLConfig { get; init; } = new() { NumEpoch = 20 };
 
         public int NumTrainData { get; init; } = 10000;
         public int NumTestData { get; init; } = 10000;
-        public WeightType TrainDataVariationFactor = WeightType.CreateChecked(0.05);
-        public int TestDataMaxRandomMove { get; init; } = 10;
+        public PUCTValueType TrainDataVariationFactor = (PUCTValueType)0.05;
+        public uint NumPlayouts { get; init; } = 3200;
         public int TrainDataUpdateInterval { get; init; } = 100;
         public int NumIterations { get; init; } = 3;
         public int NumThreads { get; init; } = Environment.ProcessorCount;
@@ -31,9 +35,9 @@ namespace KalmiaZero.Learn
         public string FitnessHistoryFileName { get; init; } = "fitness_history";
     }
 
-    public class TDGA<WeightType> where WeightType : unmanaged, IFloatingPointIeee754<WeightType>
+    public class TDGA
     {
-        readonly TDGAConfig<WeightType> CONFIG;
+        readonly TDGAConfig CONFIG;
         readonly string WORK_DIR;
         readonly string POOL_FILE_NAME;
         readonly string FITNESS_HISTROY_FILE_NAME;
@@ -44,7 +48,7 @@ namespace KalmiaZero.Learn
         readonly Random[] RANDS;
         readonly ParallelOptions PARALLEL_OPTIONS;
 
-        public TDGA(TDGAConfig<WeightType> config)
+        public TDGA(TDGAConfig config)
         {
             this.CONFIG = config;
             this.NTUPLE_SIZE = config.GAConfig.NTupleSize;
@@ -67,7 +71,7 @@ namespace KalmiaZero.Learn
                 PoolFileName = string.Format(this.POOL_FILE_NAME, 0),
                 FitnessHistroyFileName = string.Format(this.FITNESS_HISTROY_FILE_NAME, 0)
             };
-            var ga = new GA<WeightType>(gaConfig);
+            var ga = new GA<PUCTValueType>(gaConfig);
 
             Console.WriteLine("Generate random play games.");
 
@@ -106,16 +110,18 @@ namespace KalmiaZero.Learn
                     PoolFileName = string.Format(this.POOL_FILE_NAME, id),
                     FitnessHistroyFileName = string.Format(this.FITNESS_HISTROY_FILE_NAME, id)
                 };
-                var ga = new GA<WeightType>(gaConfig);
+                var ga = new GA<PUCTValueType>(gaConfig);
 
-                var nTupleGroups = GA<WeightType>.DecodePool(pool, nTupleSize, numNTuples)[..numElites];
+                var nTupleGroups = GA<PUCTValueType>.DecodePool(pool, nTupleSize, numNTuples)[..numElites];
 
                 Console.WriteLine("Start RL.");
                 var valueFuncs = TrainAgents(nTupleGroups);
 
-                Console.WriteLine("Generate games by RL agents.");
-                var trainData = GenerateTrainDataByAgents(this.NUM_TRAIN_DATA, valueFuncs);
-                var testData = GenerateTrainDataByAgents(this.NUM_TEST_DATA, valueFuncs);
+                Console.WriteLine("Generate train data with MCTS.");
+                var trainData = GenerateTrainDataWithMCTS(this.NUM_TRAIN_DATA, valueFuncs);
+
+                Console.WriteLine("Generate test data with MCTS.");
+                var testData = GenerateTrainDataWithMCTS(this.NUM_TEST_DATA, valueFuncs);
 
                 // debug
                 using (var sw = new StreamWriter("train_data.txt"))
@@ -138,27 +144,28 @@ namespace KalmiaZero.Learn
             }
         }
 
-        ValueFunction<WeightType>[] TrainAgents(NTupleGroup[] nTupleGroups)
+        ValueFunction<PUCTValueType>[] TrainAgents(NTupleGroup[] nTupleGroups)
         {
             var config = this.CONFIG.TDConfig with { SaveWeightsInterval = int.MaxValue };
-            var valueFuncs = nTupleGroups.Select(nt => new ValueFunction<WeightType>(nt)).ToArray();
+            var valueFuncs = nTupleGroups.Select(nt => new ValueFunction<PUCTValueType>(nt)).ToArray();
 
             Parallel.For(0, valueFuncs.Length, this.PARALLEL_OPTIONS, agentID =>
             {
-                var trainer = new TDTrainer<WeightType>($"AG-{agentID}", valueFuncs[agentID], config);
+                var trainer = new TDTrainer<PUCTValueType>($"AG-{agentID}", valueFuncs[agentID], config);
                 trainer.Train();
             });
 
             return valueFuncs;
         }
 
-        TrainData[] GenerateTrainDataByAgents(int numData, ValueFunction<WeightType>[] valueFuncs)
+        TrainData[] GenerateTrainDataWithMCTS(int numData, ValueFunction<PUCTValueType>[] valueFuncs)
         {
             var trainData = new TrainData[numData];
             var numThreads = this.CONFIG.NumThreads;
             var numGamesPerThread = numData / numThreads;
-            Parallel.For(0, numThreads, this.PARALLEL_OPTIONS, threadID =>
-                generate(threadID, trainData.AsSpan(numGamesPerThread * threadID, numGamesPerThread)));
+            var count = 0;
+            Parallel.For(0, numThreads, this.PARALLEL_OPTIONS, 
+                threadID => generate(threadID, trainData.AsSpan(numGamesPerThread * threadID, numGamesPerThread)));
 
             generate(0, trainData.AsSpan(numGamesPerThread * numThreads, numData % numThreads));
 
@@ -174,31 +181,30 @@ namespace KalmiaZero.Learn
                 while (ag0 == ag1);
 
                 for (var i = 0; i < data.Length; i++)
-                    data[i] = GenerateGameByAgent(threadID, new Position(), valueFuncs[ag0], valueFuncs[ag1]);
+                {
+                    data[i] = GenerateGameWithMCTS(threadID, new Position(), valueFuncs[ag0], valueFuncs[ag1]);
+                    Interlocked.Increment(ref count);
+                    Console.WriteLine($"[{count} / {numData}]");
+                }
             }
         }
 
         TrainData[] GenerateTrainDataFromRandomGame(int numData)
             => Enumerable.Range(0, numData).Select(_ => GenerateRandomGame(new Position())).ToArray();
 
-        TrainData GenerateGameByAgent(int threadID, Position rootPos, ValueFunction<WeightType> valueFuncForBlack, ValueFunction<WeightType> valueFuncForWhite)
+        TrainData GenerateGameWithMCTS(int threadID, Position rootPos, ValueFunction<PUCTValueType> valueFuncForBlack, ValueFunction<PUCTValueType> valueFuncForWhite)
         {
             var rand = this.RANDS[threadID];
             var pos = rootPos;
             var moveHistory = new List<Move>();
-            var featureVec = new PositionFeatureVector(valueFuncForBlack.NTuples);
-            var oppFeatureVec = new PositionFeatureVector(valueFuncForWhite.NTuples);
-            var valueFunc = valueFuncForBlack;
-            var oppValueFunc = valueFuncForWhite;
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
-            Span<Move> nextMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
-            Span<WeightType> moveValues = stackalloc WeightType[Constants.MAX_NUM_MOVES];
-            Span<int> moveCandidates = stackalloc int[Constants.MAX_NUM_MOVES];
-            var numCandidates = 0;
+            var moveEvals = new MoveEvaluation[Constants.MAX_NUM_MOVES];
 
+            var puct = new PUCT(valueFuncForBlack);
+            var oppPUCT = new PUCT(valueFuncForWhite);
+            puct.SetRootState(ref pos);
+            oppPUCT.SetRootState(ref pos);
             var numMoves = pos.GetNextMoves(ref moves);
-            featureVec.Init(ref pos, moves[..numMoves]);
-            oppFeatureVec.Init(ref pos, moves[..numMoves]);
 
             var passCount = 0;
             while(passCount < 2)
@@ -207,85 +213,101 @@ namespace KalmiaZero.Learn
                 {
                     pos.Pass();
                     numMoves = pos.GetNextMoves(ref moves);
-                    featureVec.Pass(moves[..numMoves]);
-                    oppFeatureVec.Pass(moves[..numMoves]);
                     moveHistory.Add(Move.Pass);
                     passCount++;
-                    (featureVec, oppFeatureVec) = (oppFeatureVec, featureVec);
-                    (valueFunc, oppValueFunc) = (oppValueFunc, valueFunc);
+
+                    updatePUCT(puct, ref pos, BoardCoordinate.Pass);
+                    updatePUCT(oppPUCT, ref pos, BoardCoordinate.Pass);
+                    (puct, oppPUCT) = (oppPUCT, puct);
                     continue;
                 }
 
                 passCount = 0;
-                var maxValue = WeightType.NegativeInfinity;
-                for(var i = 0; i < numMoves; i++)
+                Move move;
+                if (numMoves == 1)
+                    move = moves[0];
+                else
                 {
-                    ref var move = ref moves[i];
-                    pos.GenerateMove(ref move);
-                    pos.Update(ref move);
-                    var numNextMoves = pos.GetNextMoves(ref nextMoves);
-                    featureVec.Update(ref move, nextMoves[..numNextMoves]);
+                    puct.SearchOnSingleThread(this.CONFIG.NumPlayouts);
+                    var searchInfo = puct.CollectSearchInfo();
 
-                    moveValues[i] = WeightType.One - valueFunc.Predict(featureVec);
-                    if (moveValues[i] > maxValue)
-                        maxValue = moveValues[i];
+                    Debug.Assert(searchInfo is not null);
 
-                    pos.Undo(ref move);
-                    featureVec.Undo(ref move, moves[..numMoves]);
+                    searchInfo.ChildEvals.CopyTo(moveEvals);
+                    var bestValue = moveEvals[0].ExpectedReward;
+                    var numCandidates = 0;
+                    var playoutCount = 0u;
+                    for(var i = 0; i < numMoves; i++) 
+                    {
+                        if (Math.Abs(bestValue - moveEvals[i].ExpectedReward) <= this.CONFIG.TrainDataVariationFactor)
+                        {
+                            (moveEvals[numCandidates], moveEvals[i]) = (moveEvals[i], moveEvals[numCandidates]);
+                            playoutCount += moveEvals[numCandidates].PlayoutCount;
+                            numCandidates++;
+                        }
+                    }
+                    rand.Shuffle(moveEvals.AsSpan(0, numCandidates));
+
+                    var arrow = playoutCount * rand.NextDouble();
+                    var sum = 0u;
+                    var idx = -1;
+                    do
+                        sum += moveEvals[++idx].PlayoutCount;
+                    while (sum < arrow);
+                    move = new Move(moveEvals[idx].Move);
                 }
 
-                numCandidates = 0;
-                for (var i = 0; i < numMoves; i++)
-                    if (maxValue - moveValues[i] <= this.CONFIG.TrainDataVariationFactor)
-                        moveCandidates[numCandidates++] = i;
-
-                var moveChosen = moves[moveCandidates[rand.Next(numCandidates)]];
-                pos.GenerateMove(ref moveChosen);
-                pos.Update(ref moveChosen);
+                pos.GenerateMove(ref move);
+                pos.Update(ref move);
                 numMoves = pos.GetNextMoves(ref moves);
-                featureVec.Update(ref moveChosen, moves[..numMoves]);
-                oppFeatureVec.Update(ref moveChosen, moves[..numMoves]);
-                moveHistory.Add(moveChosen);
 
-                (featureVec, oppFeatureVec) = (oppFeatureVec, featureVec);
-                (valueFunc, oppValueFunc) = (oppValueFunc, valueFunc);
+                updatePUCT(puct, ref pos, move.Coord);
+                updatePUCT(oppPUCT, ref pos, move.Coord);
+                (puct, oppPUCT) = (oppPUCT, puct);
+                moveHistory.Add(move);
             }
 
             moveHistory.RemoveRange(moveHistory.Count - 2, 2);  // removes last two passes.
 
             return new TrainData(rootPos, moveHistory, (sbyte)pos.GetScore(DiscColor.Black));
+
+            static void updatePUCT(PUCT puct, ref Position pos, BoardCoordinate move)
+            {
+                if (!puct.TransitionRootStateToChildState(move))
+                    puct.SetRootState(ref pos);
+            }
         }
 
         TrainData GenerateRandomGame(Position rootPos)
         {
             var rand = this.RANDS[0];
             var pos = new Position(rootPos.GetBitboard(), rootPos.SideToMove);
-            var moves = new List<Move>();
-            Span<Move> nextMoves = stackalloc Move[Constants.MAX_NUM_MOVES];
+            var moveHistory = new List<Move>();
+            Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
 
             var passCount = 0;
             while(passCount < 2)
             {
-                var numMoves = pos.GetNextMoves(ref nextMoves);
+                var numMoves = pos.GetNextMoves(ref moves);
 
                 if(numMoves == 0)
                 {
                     pos.Pass();
-                    moves.Add(Move.Pass);
+                    moveHistory.Add(Move.Pass);
                     passCount++;
                     continue;
                 }
 
                 passCount = 0;
-                ref var move = ref nextMoves[rand.Next(numMoves)];
+                ref var move = ref moves[rand.Next(numMoves)];
                 pos.GenerateMove(ref move);
                 pos.Update(ref move);
-                moves.Add(move);
+                moveHistory.Add(move);
             }
 
-            moves.RemoveRange(moves.Count - 2, 2);  // removes last two passes.
+            moveHistory.RemoveRange(moveHistory.Count - 2, 2);  // removes last two passes.
 
-            return new TrainData(rootPos, moves, (sbyte)pos.GetScore(DiscColor.Black));
+            return new TrainData(rootPos, moveHistory, (sbyte)pos.GetScore(DiscColor.Black));
         }
     }
 }

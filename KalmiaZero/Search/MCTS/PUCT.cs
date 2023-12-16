@@ -178,7 +178,11 @@ namespace KalmiaZero.Search.MCTS
             {
                 if (move == edges[i].Move.Coord && this.root.ChildNodes[i] is not null)
                 {
-                    this.rootState.Update(ref edges[i].Move);
+                    if (move != BoardCoordinate.Pass)
+                        this.rootState.Update(ref edges[i].Move);
+                    else
+                        this.rootState.Pass();
+
                     this.root = this.root.ChildNodes[i];
                     InitRootChildNodes();
                     this.rootEdgeLabel = edges[i].Label;
@@ -272,6 +276,18 @@ namespace KalmiaZero.Search.MCTS
             this.cts = null;
 
             return status;
+        }
+
+        public void SearchOnSingleThread(uint numPlayouts)
+        {
+            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+            var g = new GameInfo(this.valueFunc.NTuples);
+            for (var i = 0u; i < numPlayouts && this.rootEdgeLabel == EdgeLabel.NotProved; i++)
+            {
+                this.playoutCount++;
+                game.CopyTo(ref g);
+                VisitRootNode(0, ref g);
+            }
         }
 
         public void SendStopSearchSignal() => this.cts?.Cancel();
@@ -433,15 +449,16 @@ namespace KalmiaZero.Search.MCTS
 
             if (!this.root.IsExpanded)
             {
-                var gameInfo = new GameInfo(this.rootState, this.valueFunc.NTuples);
-                if (gameInfo.Moves.Length == 0)
+                var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
+                if (game.Moves.Length == 0)
                     return;
 
-                this.root.Expand(gameInfo.Moves);
+                this.root.Expand(game.Moves);
 
                 Debug.Assert(this.root.Edges is not null);
 
-                SetPolicyProbsAndValues(ref gameInfo, this.root.Edges);
+                if (game.Moves.Length != 0)
+                    SetPolicyProbsAndValues(ref game, this.root.Edges);
             }
 
             Debug.Assert(this.root.Edges is not null);
@@ -756,6 +773,8 @@ namespace KalmiaZero.Search.MCTS
             var expValues = stackalloc PUCTValueType[edges.Length];
             for (var i = 0; i < edges.Length; i++)
             {
+                Debug.Assert(edges[i].Move.Coord != BoardCoordinate.Pass);
+
                 ref var edge = ref edges[i];
                 ref Move move = ref game.Moves[i];
                 game.Position.GenerateMove(ref move);
