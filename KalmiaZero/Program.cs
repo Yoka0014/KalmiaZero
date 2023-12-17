@@ -1,12 +1,12 @@
 ﻿//#define VALUE_GREEDY_ENGINE
-//#define PUCT_ENGINE
+#define PUCT_ENGINE
 //#define PUCT_PERFT
 //#define SL
 //#define RL
 //#define MULTI_RL
 //#define MT_RL
 //#define SL_GA
-#define TD_GA
+//#define TD_GA
 //#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
 //#define DEV_TEST

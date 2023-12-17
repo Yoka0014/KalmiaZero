@@ -28,15 +28,10 @@
 //            this.maxDepth = depth;
 //            var game = new GameInfo(pos, this.valueFunc.NTuples);
 //            (var alpha, var beta) = (0.0f, 1.0f);
-//            var bestMove = (game.Moves.Length != 0) ? game.Moves[0].Coord : BoardCoordinate.Pass;
 
-//            if(game.Moves.Length == 0) // pass
-//            {
-//                game.Pass();
-//                return (bestMove, Math.Max(alpha, 1.0f - Search<True>(ref game, 1.0f - beta, 1.0f - alpha, depth + 1)));
-//            }
-
-//            for(var i = 0; i < game.Moves.Length; i++)
+//            var bestMove = BoardCoordinate.Pass;
+//            var 
+//            for (var i = 0; i < game.Moves.Length; i++)
 //            {
 //                ref var move = ref game.Moves[i];
 //            }
@@ -48,27 +43,27 @@
 //            if (depth == this.maxDepth)
 //                return this.valueFunc.Predict(game.FeatureVector);
 
-//            if(game.Moves.Length == 0)  // pass
+//            if (game.Moves.Length == 0)  // pass
 //            {
 //                if (typeof(AfterPass) == typeof(True))
 //                    return ScoreToEval(game.Position.DiscDiff);
 
 //                game.Pass();
-//                alpha =  Math.Max(alpha, 1.0f - Search<True>(ref game, 1.0f - beta, 1.0f - alpha, depth + 1));
+//                alpha = Math.Max(alpha, 1.0f - Search<True>(ref game, 1.0f - beta, 1.0f - alpha, depth + 1));
 //                game.Pass();
 //                return alpha;
 //            }
 
 //            Span<Move> moves = stackalloc Move[game.Moves.Length];
-//            if(PositionFeaturesConstantConfig.NUM_SQUARE_STATES == 4)
-//                game.Moves.CopyTo(moves);
+//            var numMoves = game.Moves.Length;
+//            game.Moves.CopyTo(moves);
 
-//            for(var i = 0; i < game.Moves.Length; i++)
+//            for (var i = 0; i < game.Moves.Length; i++)
 //            {
 //                var move = game.Moves[i];
 //                game.Update(ref move);
 //                alpha = Math.Max(alpha, 1.0f - Search<False>(ref game, 1.0f - beta, 1.0f - alpha, depth + 1));
-//                game.Undo(ref move);
+//                game.Undo(ref move, moves[..numMoves]);
 //                if (alpha >= beta)
 //                    return alpha;   // alpha cut
 //            }

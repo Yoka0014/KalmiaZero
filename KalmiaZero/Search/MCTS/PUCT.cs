@@ -242,7 +242,6 @@ namespace KalmiaZero.Search.MCTS
 
             Edge[] edges = this.root.Edges;
             var childEvals = new MoveEvaluation[this.root.Edges.Length];
-            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
 
             var rootEval = new MoveEvaluation(GetPV(this.root))
             {
@@ -266,7 +265,7 @@ namespace KalmiaZero.Search.MCTS
                 };
             }
 
-            Array.Sort(childEvals);
+            Array.Sort(childEvals, (x, y) => -x.CompareTo(y));
 
             return new SearchInfo(rootEval, childEvals);
         }
