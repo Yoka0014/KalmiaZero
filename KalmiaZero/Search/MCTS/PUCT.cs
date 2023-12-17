@@ -69,6 +69,21 @@ namespace KalmiaZero.Search.MCTS
             if (other is null)
                 return 1;
 
+            if(this.GameResult != GameResult.NotOver)
+            {
+                if (this.GameResult == other.GameResult)
+                    return 0;
+
+                if (this.GameResult == GameResult.Win)
+                    return 1;
+
+                if (this.GameResult == GameResult.Loss)
+                    return -1;
+
+                if (this.GameResult == GameResult.Draw && other.GameResult == GameResult.Loss)
+                    return 1;
+            }
+
             if(other.GameResult != GameResult.NotOver)
             {
                 if (other.GameResult == this.GameResult)
