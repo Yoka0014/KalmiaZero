@@ -239,7 +239,7 @@ namespace KalmiaZero.Learn
                     var playoutCount = 0u;
                     for(var i = 0; i < numMoves; i++) 
                     {
-                        if (bestValue - moveEvals[i].ExpectedReward > this.CONFIG.TrainDataVariationFactor)
+                        if (bestValue - moveEvals[i].ExpectedReward <= this.CONFIG.TrainDataVariationFactor)
                         {
                             (moveEvals[numCandidates], moveEvals[i]) = (moveEvals[i], moveEvals[numCandidates]);
                             playoutCount += moveEvals[numCandidates].PlayoutCount;
