@@ -1,12 +1,12 @@
 ﻿//#define VALUE_GREEDY_ENGINE
-#define PUCT_ENGINE
+//#define PUCT_ENGINE
 //#define PUCT_PERFT
 //#define SL
 //#define RL
 //#define MULTI_RL
 //#define MT_RL
 //#define SL_GA
-//#define TD_GA
+#define TD_GA
 //#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
 //#define DEV_TEST
@@ -149,7 +149,7 @@ namespace KalmiaZero
 
 #if TD_GA
             var sw = new Stopwatch();
-            var ga = new TDGA(new TDGAConfig() { TDConfig = new TDTrainerConfig<float> { NumEpisodes = 100 }, NumTrainData = 10000, NumTestData = 100 });
+            var ga = new TDGA(new TDGAConfig() { TDConfig = new TDTrainerConfig<float> { NumEpisodes = 5000000 }, NumTrainData = 10000, NumTestData = 10000 });
             sw.Start();
             if (args.Length > 0)
                 ga.Train(args[0], 1000);

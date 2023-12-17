@@ -28,7 +28,7 @@ namespace KalmiaZero.Search.MCTS
         public const uint VIRTUAL_LOSS = 1;
     }
 
-    public class MoveEvaluation
+    public class MoveEvaluation : IComparable<MoveEvaluation>
     {
         public BoardCoordinate Move { get; init; }
         public double Effort { get; init; }
@@ -41,7 +41,7 @@ namespace KalmiaZero.Search.MCTS
 
         public MoveEvaluation(IEnumerable<BoardCoordinate> pv) => this.pv = pv.ToArray();
 
-        public bool PriorTo(MoveEvaluation moveEval)
+        public bool PriorTo(MoveEvaluation other)
         {
             if (this.GameResult != GameResult.NotOver)
             {
@@ -53,15 +53,41 @@ namespace KalmiaZero.Search.MCTS
 
                 if (this.GameResult == GameResult.Draw)
                 {
-                    if (moveEval.GameResult == GameResult.Loss || moveEval.GameResult == GameResult.Draw)
+                    if (other.GameResult == GameResult.Loss || other.GameResult == GameResult.Draw)
                         return true;
                 }
             }
 
-            var diff = (long)this.PlayoutCount - moveEval.PlayoutCount;
+            var diff = (long)this.PlayoutCount - other.PlayoutCount;
             if (diff != 0)
                 return diff > 0;
-            return this.ExpectedReward > moveEval.ExpectedReward;
+            return this.ExpectedReward > other.ExpectedReward;
+        }
+
+        public int CompareTo(MoveEvaluation? other)
+        {
+            if (other is null)
+                return 1;
+
+            if(other.GameResult != GameResult.NotOver)
+            {
+                if (other.GameResult == this.GameResult)
+                    return 0;
+
+                if (other.GameResult == GameResult.Win)
+                    return -1;
+
+                if (other.GameResult == GameResult.Loss)
+                    return 1;
+
+                if (other.GameResult == GameResult.Draw && this.GameResult == GameResult.Loss)
+                    return -1;
+            }
+
+            var diff = (long)this.PlayoutCount - other.PlayoutCount;
+            if (diff == 0)
+                return 0;
+            return diff > 0 ? 1 : -1;
         }
     }
 
@@ -225,7 +251,7 @@ namespace KalmiaZero.Search.MCTS
                 };
             }
 
-            Array.Sort(childEvals, (x, y) => x.PriorTo(y) ? -1 : 1);
+            Array.Sort(childEvals);
 
             return new SearchInfo(rootEval, childEvals);
         }
