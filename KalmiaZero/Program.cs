@@ -1,5 +1,6 @@
 ﻿//#define VALUE_GREEDY_ENGINE
-#define PUCT_ENGINE
+//#define PUCT_ENGINE
+#define ALPHA_BETA_ENGINE
 //#define PUCT_PERFT
 //#define SL
 //#define RL
@@ -51,6 +52,16 @@ namespace KalmiaZero
 
 #if PUCT_ENGINE
             var engine = new PUCTEngine();
+
+            if (args.Length > 0)
+                engine.SetOption("value_func_weights_path", args[0]);
+
+            var nboard = new NBoard();
+            nboard.Mainloop(engine);
+#endif
+
+#if ALPHA_BETA_ENGINE
+            var engine = new AlphaBetaEngine();
 
             if (args.Length > 0)
                 engine.SetOption("value_func_weights_path", args[0]);

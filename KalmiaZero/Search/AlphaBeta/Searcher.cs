@@ -1,81 +1,245 @@
-﻿//using System;
-//using System.Collections.Generic;
-//using System.Linq;
-//using System.Reflection.Metadata.Ecma335;
-//using System.Runtime.CompilerServices;
-//using System.Text;
-//using System.Threading.Tasks;
+﻿global using AlphaBetaEvalType = System.Single;
 
-//using KalmiaZero.Evaluation;
-//using KalmiaZero.NTuple;
-//using KalmiaZero.Reversi;
-//using KalmiaZero.Utils;
+using System;
+using System.Diagnostics;
+using System.Net.Sockets;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 
-//namespace KalmiaZero.Search.AlphaBeta
-//{
-//    public class Searcher
-//    {
-//        ValueFunction<float> valueFunc;
-//        int maxDepth;
+using KalmiaZero.Evaluation;
+using KalmiaZero.Reversi;
+using KalmiaZero.Search.MCTS;
+using KalmiaZero.Utils;
 
-//        public Searcher(ValueFunction<float> valueFunc)
-//        {
-//            this.valueFunc = valueFunc;
-//        }
+namespace KalmiaZero.Search.AlphaBeta
+{
+    public struct SearchResult 
+    {
+        public BoardCoordinate BestMove { get; }
+        public AlphaBetaEvalType EvalScore { get; }
 
-//        public (BoardCoordinate bestMove, float eval) Search(ref Position pos, int depth)
-//        {
-//            this.maxDepth = depth;
-//            var game = new GameInfo(pos, this.valueFunc.NTuples);
-//            (var alpha, var beta) = (0.0f, 1.0f);
+        public SearchResult(BoardCoordinate bestMove, AlphaBetaEvalType evalScore)
+        {
+            this.BestMove = bestMove;
+            this.EvalScore = evalScore;
+        }
+    }
 
-//            var bestMove = BoardCoordinate.Pass;
-//            var 
-//            for (var i = 0; i < game.Moves.Length; i++)
-//            {
-//                ref var move = ref game.Moves[i];
-//            }
-//        }
+    public class Searcher
+    {
+        const AlphaBetaEvalType SCORE_MIN = 0;
+        const AlphaBetaEvalType SCORE_MAX = 1;
+        const AlphaBetaEvalType NULL_WINDOW_WIDTH = (AlphaBetaEvalType)0.001;
 
-//        [SkipLocalsInit]
-//        float Search<AfterPass>(ref GameInfo game, float alpha, float beta, int depth) where AfterPass : struct, IFlag
-//        {
-//            if (depth == this.maxDepth)
-//                return this.valueFunc.Predict(game.FeatureVector);
+        public int SearchEllapsedMs => this.isSearching ? Environment.TickCount - this.searchStartTime : this.searchEndTime - this.searchStartTime;
+        public uint NodeCount { get; private set; }
+        public double Nps => this.NodeCount / (this.SearchEllapsedMs * 1.0e-3);
+        public bool IsSearching => this.isSearching;
 
-//            if (game.Moves.Length == 0)  // pass
-//            {
-//                if (typeof(AfterPass) == typeof(True))
-//                    return ScoreToEval(game.Position.DiscDiff);
+        volatile bool isSearching;
+        int searchStartTime = 0;
+        int searchEndTime = 0;
 
-//                game.Pass();
-//                alpha = Math.Max(alpha, 1.0f - Search<True>(ref game, 1.0f - beta, 1.0f - alpha, depth + 1));
-//                game.Pass();
-//                return alpha;
-//            }
+        ValueFunction<AlphaBetaEvalType> valueFunc;
 
-//            Span<Move> moves = stackalloc Move[game.Moves.Length];
-//            var numMoves = game.Moves.Length;
-//            game.Moves.CopyTo(moves);
+        CancellationTokenSource? cts;
 
-//            for (var i = 0; i < game.Moves.Length; i++)
-//            {
-//                var move = game.Moves[i];
-//                game.Update(ref move);
-//                alpha = Math.Max(alpha, 1.0f - Search<False>(ref game, 1.0f - beta, 1.0f - alpha, depth + 1));
-//                game.Undo(ref move, moves[..numMoves]);
-//                if (alpha >= beta)
-//                    return alpha;   // alpha cut
-//            }
+        public Searcher(ValueFunction<AlphaBetaEvalType> valueFunc)
+        {
+            this.valueFunc = valueFunc;
+        }
 
-//            return alpha;
-//        }
+        public void SendStopSearchSignal() => this.cts?.Cancel();
 
-//        static float ScoreToEval(int score)
-//        {
-//            if (score == 0)
-//                return 0.5f;
-//            return (score > 0) ? 1.0f : 0.0f;
-//        }
-//    }
-//}
+        public async Task<SearchResult> SearchAsync(Position pos, int depth, Action<SearchResult> searchEndCallback)
+        {
+            this.cts = new CancellationTokenSource();
+            this.isSearching = true;
+            var ret = await Task.Run(() => 
+            {
+                var ret = Search(pos, depth);
+                searchEndCallback(ret);
+                return ret;
+            }).ConfigureAwait(false);
+            return ret;
+        }
+
+        public SearchResult Search(Position pos, int maxDepth)
+        {
+            var game = new GameInfo(pos, this.valueFunc.NTuples);
+
+            if (game.Moves.Length == 0)
+            {
+                this.isSearching = false;
+                return new SearchResult(BoardCoordinate.Pass, AlphaBetaEvalType.NaN);
+            }
+
+            Span<Move> moves = stackalloc Move[game.Moves.Length];
+            var numMoves = game.Moves.Length;
+            game.Moves.CopyTo(moves);
+
+            this.searchStartTime = Environment.TickCount;
+            this.isSearching = true;
+
+            OrderMovesByFastestFirst(ref pos, moves[..numMoves]);
+
+            var bestMove = moves[0].Coord;
+            (AlphaBetaEvalType alpha, AlphaBetaEvalType beta) = (SCORE_MIN, SCORE_MAX);
+            game.Update(ref moves[0]);
+            var score = 1 - Search<False>(ref game, 1 - beta, 1 - alpha, maxDepth, out bool stopFlag);
+            game.Undo(ref moves[0], moves[..numMoves]);
+
+            if (score > alpha) 
+                alpha = score;
+
+            for (var i = 1; i < numMoves; i++)
+            {
+                ref var move = ref moves[i];
+                game.Update(ref move);
+
+                score = 1 - Search<False>(ref game, 1 - alpha - NULL_WINDOW_WIDTH, 1 - alpha, maxDepth, out stopFlag);  // NWS
+
+                if (score > alpha)
+                {
+                    alpha = score;
+                    score = 1 - Search<False>(ref game, 1 - beta, 1 - alpha, maxDepth, out stopFlag);
+
+                    if (score > alpha)
+                    {
+                        alpha = score;
+                        bestMove = move.Coord;
+                    }
+                }
+
+                game.Undo(ref move, moves[..numMoves]);
+            }
+
+            this.searchEndTime = Environment.TickCount;
+            this.isSearching = false;
+
+            return new SearchResult(bestMove, alpha);
+        }
+
+        [SkipLocalsInit]
+        AlphaBetaEvalType Search<AfterPass>(ref GameInfo game, AlphaBetaEvalType alpha, AlphaBetaEvalType beta, int depthLeft, out bool stopFlag) where AfterPass : struct, IFlag
+        {
+            stopFlag = false;
+            if (game.Moves.Length == 0)  // pass
+            {
+                if (typeof(AfterPass) == typeof(True))
+                {
+                    this.NodeCount++;
+                    if (this.cts is not null)
+                        stopFlag = this.cts.IsCancellationRequested;
+                    return DiscDiffToScore(game.Position.DiscDiff);
+                }
+
+                game.Pass();
+
+                var ret = 1 - Search<True>(ref game, 1 - beta, 1 - alpha, depthLeft - 1, out stopFlag);
+
+                game.Pass();
+
+                return ret;
+            }
+
+            if (depthLeft <= 0)
+            {
+                this.NodeCount++;
+                if (this.cts is not null)
+                    stopFlag = this.cts.IsCancellationRequested;
+                return this.valueFunc.Predict(game.FeatureVector);
+            }
+
+            Span<Move> moves = stackalloc Move[game.Moves.Length];
+            var numMoves = game.Moves.Length;
+            game.Moves.CopyTo(moves);
+
+            OrderMovesByFastestFirst(ref game.Position, moves[..numMoves]);
+
+            AlphaBetaEvalType maxScore, score;
+            game.Update(ref moves[0]);
+            maxScore = score = 1 - Search<False>(ref game, 1 - beta, 1 - alpha, depthLeft - 1, out stopFlag);
+            game.Undo(ref moves[0], moves[..numMoves]);
+
+            if (score >= beta)
+                return score;
+
+            if (score > alpha)
+                alpha = score;
+
+            for (var i = 1; i < numMoves; i++)
+            {
+                ref var move = ref moves[i];
+                game.Update(ref move);
+
+                score = 1 - Search<False>(ref game, 1 - alpha - NULL_WINDOW_WIDTH, 1 - alpha, depthLeft - 1, out stopFlag);  // NWS
+
+                if (score >= beta)
+                {
+                    game.Undo(ref move, moves[..numMoves]);
+                    return score;
+                }
+
+                if (score > alpha)
+                {
+                    alpha = score;
+                    score = 1 - Search<False>(ref game, 1 - beta, 1 - alpha, depthLeft - 1, out stopFlag);
+
+                    if (score >= beta)
+                    {
+                        game.Undo(ref move, moves[..numMoves]);
+                        return score;
+                    }
+                }
+
+                game.Undo(ref move, moves[..numMoves]);
+
+                if (score > maxScore)
+                {
+                    maxScore = score;
+                    alpha = Math.Max(alpha, score); 
+                }
+            }
+
+            return maxScore;
+        }
+
+        [SkipLocalsInit]
+        static void OrderMovesByFastestFirst(ref Position pos, Span<Move> moves)
+        {
+            Span<int> scores = stackalloc int[Constants.NUM_SQUARES];
+            for(var i = 0; i < moves.Length; i++)
+            {
+                ref var move = ref moves[i];
+                pos.GenerateMove(ref move);
+                pos.Update(ref move);
+                scores[(int)move.Coord] = pos.GetNumNextMoves();
+                pos.Undo(ref move);
+            }
+
+            for(var i = 1; i < moves.Length; i++)
+            {
+                if (scores[(int)moves[i - 1].Coord] < scores[(int)moves[i].Coord])
+                {
+                    var j = i;
+                    var tmp = moves[i];
+                    do
+                    {
+                        moves[j] = moves[j - 1];
+                        j--;
+                    } while (j > 0 && scores[(int)moves[j - 1].Coord] < scores[(int)tmp.Coord]);
+                    moves[j] = tmp;
+                }
+            }
+        }
+
+        static AlphaBetaEvalType DiscDiffToScore(int score)
+        {
+            if (score == 0)
+                return (AlphaBetaEvalType)0.5;
+            return (score > 0) ? 1 : 0;
+        }
+    }
+}

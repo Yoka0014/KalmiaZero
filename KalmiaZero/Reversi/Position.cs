@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -187,6 +188,8 @@ namespace KalmiaZero.Reversi
             foreach (var coord in BitManipulations.EnumerateSets(this.bitboard.ComputePlayerMobility()))
                 yield return (BoardCoordinate)coord;
         }
+
+        public readonly int GetNumNextMoves() => BitOperations.PopCount(this.bitboard.ComputePlayerMobility());
 
         public readonly Move GenerateMove(BoardCoordinate coord) => new(coord, this.bitboard.ComputeFlippingDiscs(coord));
 
