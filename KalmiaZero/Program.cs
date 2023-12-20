@@ -1,9 +1,9 @@
 ﻿//#define VALUE_GREEDY_ENGINE
 //#define PUCT_ENGINE
-#define ALPHA_BETA_ENGINE
+//#define ALPHA_BETA_ENGINE
 //#define PUCT_PERFT
 //#define SL
-//#define RL
+#define RL
 //#define MULTI_RL
 //#define MT_RL
 //#define SL_GA
@@ -100,10 +100,14 @@ namespace KalmiaZero
             else
             {
                 var nTupleInfos = Enumerable.Range(0, 12).Select(_ => new NTupleInfo(10)).ToArray();
-                var nTuples = new NTuples(nTupleInfos);
+                var nTuples = new NTupleGroup(nTupleInfos);
                 valueFunc = new ValueFunction<float>(nTuples);
             }
-            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 100000000, SaveWeightsInterval = 10000000 });
+
+            if (args.Length > 1 && args[1] == "zero")
+                valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
+
+            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 100000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.9f});
             sw.Start();
             tdTrainer.Train();
             sw.Stop();

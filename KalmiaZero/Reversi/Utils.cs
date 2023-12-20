@@ -133,8 +133,11 @@ namespace KalmiaZero.Reversi
 
         public static DiscColor ToOpponentColor(DiscColor color) => color ^ DiscColor.White;
 
-        public static DiscColor ParseDiscColor(string str)
+        public static DiscColor ParseDiscColor(string? str)
         {
+            if (str is null)
+                return DiscColor.Null;
+
             var lstr = str.Trim().ToLower();
 
             if (lstr == "b" || lstr == "black")
@@ -149,5 +152,15 @@ namespace KalmiaZero.Reversi
         public static Player ToOpponentPlayer(Player player) => player ^ Player.Second;
 
         public static GameResult ToOpponentGameResult(GameResult result) => (GameResult)(-(int)result);
+
+        public static int IndexOf(this Span<Move> moves, BoardCoordinate value) => IndexOf((ReadOnlySpan<Move>)moves, value);
+
+        public static int IndexOf(this ReadOnlySpan<Move> moves, BoardCoordinate value)
+        {
+            for (var i = 0; i < moves.Length; i++)
+                if (moves[i].Coord == value)
+                    return i;
+            return -1;
+        }
     }
 }

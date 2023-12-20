@@ -28,10 +28,15 @@ namespace KalmiaZero.Engines
 
         public AlphaBetaEngine() : base("AlphaBetaEngine", "0.0", "Yoka0014")
         {
-            this.Options.Add("max_depth", new EngineOption(3, 1, Constants.NUM_SQUARES - 4));
+            this.Options.Add("mid_depth", new EngineOption(3, 1, Constants.NUM_SQUARES - 4));
+            this.Options.Add("end_depth", new EngineOption(6, 1, Constants.NUM_SQUARES - 4));
+
+            var option = new EngineOption(1024, 64, long.MaxValue);
+            option.ValueChanged += (_, e) => this.searcher?.SetTranspositionTableSize((long)(e.CurrentValue * 1024L * 1024L));
+            this.Options.Add("tt_size_mib", option);
 
             var weightsPath = Path.Combine(PARAMS_DIR, DEFAULT_VALUE_FUNC_WEIGHTS_FILE_NAME);
-            var option = new EngineOption(weightsPath, EngineOptionType.FileName);
+            option = new EngineOption(weightsPath, EngineOptionType.FileName);
             option.ValueChanged += OnValueFuncWeightsPathSpecified;
             this.Options.Add("value_func_weights_path", option);
         }
@@ -87,7 +92,11 @@ namespace KalmiaZero.Engines
             timer.IncrementMs = incMs;
         }
 
-        public override void SetLevel(int level) => this.Options["max_depth"].CurrentValueString = level.ToString();
+        public override void SetLevel(int level)
+        {
+            this.Options["mid_depth"].CurrentValueString = level.ToString();
+            this.Options["end_depth"].CurrentValueString = (level * 2).ToString();
+        }
 
         public override void SetBookContempt(int contempt) { }
         public override void AddCurrentGameToBook() { }
@@ -123,18 +132,21 @@ namespace KalmiaZero.Engines
         {
             StopIfPondering();
             this.searchTask?.Wait();
+            this.searcher?.SetRootPos(this.Position);
         }
 
         protected override void OnUpdatedPosition()
         {
             StopIfPondering();
             this.searchTask?.Wait();
+            this.searcher?.UpdateRootPos(this.MoveHistory[^1].Coord);
         }
 
         protected override void OnUndidPosition()
         {
             StopIfPondering();
             this.searchTask?.Wait();
+            this.searcher?.SetRootPos(this.Position);
         }
 
         public override void Analyze(int numMoves) => SendErrorMessage("Analysis is not supported.");
@@ -159,7 +171,9 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(valueFuncWeightsPath));
+                long ttSize = this.Options["tt_size_mib"].CurrentValue * 1024L * 1024L;
+                this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(valueFuncWeightsPath), ttSize);
+                this.searcher.SetRootPos(this.Position);
             }
             catch (InvalidDataException ex)
             {
@@ -189,7 +203,9 @@ namespace KalmiaZero.Engines
 
             try
             {
-                this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(path));
+                long ttSize = this.Options["tt_size_mib"].CurrentValue * 1024L * 1024L;
+                this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(path), ttSize);
+                this.searcher.SetRootPos(this.Position);
             }
             catch (InvalidDataException ex)
             {
@@ -201,8 +217,13 @@ namespace KalmiaZero.Engines
         {
             Debug.Assert(this.searcher is not null);
 
-            var depth = (int)this.Options["max_depth"].CurrentValue;
-            this.searchTask = this.searcher.SearchAsync(this.Position, depth, searchEndCallback);
+            int depth;
+            if (this.Position.EmptySquareCount > this.Options["end_depth"].CurrentValue)
+                depth = (int)this.Options["mid_depth"].CurrentValue;
+            else
+                depth = (int)this.Options["end_depth"].CurrentValue;
+
+            this.searchTask = this.searcher.SearchAsync(depth, searchEndCallback);
 
             void searchEndCallback(SearchResult searchRes)
             {

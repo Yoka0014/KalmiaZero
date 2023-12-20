@@ -48,6 +48,7 @@ namespace KalmiaZero.Reversi
 
         public readonly Bitboard GetBitboard() => this.bitboard;
         public void SetBitboard(Bitboard bitboard) { this.bitboard = bitboard; }
+        public readonly bool Has(ref Bitboard bitboard) => this.bitboard == bitboard; 
 
         public void Init(Bitboard bitboard, DiscColor sideToMove)
         {
