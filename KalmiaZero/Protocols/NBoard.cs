@@ -26,7 +26,7 @@ namespace KalmiaZero.Protocols
 
         Engine? engine;
         StreamWriter logger;
-        volatile int numHints;
+        volatile int numHints = 1;
         volatile bool engineIsThinking;
         volatile bool quitFlag;
         readonly object MAINLOOP_LOCK = new();

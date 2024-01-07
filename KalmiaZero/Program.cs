@@ -1,9 +1,10 @@
 ﻿//#define VALUE_GREEDY_ENGINE
 //#define PUCT_ENGINE
-//#define ALPHA_BETA_ENGINE
+#define ALPHA_BETA_ENGINE
+//#define ENDGAME_TEST
 //#define PUCT_PERFT
 //#define SL
-#define RL
+//#define RL
 //#define MULTI_RL
 //#define MT_RL
 //#define SL_GA
@@ -29,6 +30,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Threading;
+using KalmiaZero.Search.AlphaBeta;
 
 namespace KalmiaZero
 {
@@ -70,19 +72,26 @@ namespace KalmiaZero
             nboard.Mainloop(engine);
 #endif
 
+#if ENDGAME_TEST
+            var ttSize = long.Parse(args[1]) * 1024 * 1024;
+            EndgameTest.SearchOneEndgame(new Searcher(ValueFunction<float>.LoadFromFile(args[0]), ttSize));
+#endif
+
 #if PUCT_PERFT
             PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), Environment.ProcessorCount, 500000, 100);
 #endif
 
 #if SL
             var sw = new Stopwatch();
-            var nTupleInfos = Enumerable.Range(0, 1).Select(_ => new NTupleInfo(7)).ToArray();
-
-            foreach(var nTuple in nTupleInfos)
-                Console.WriteLine(nTuple);
-
-            var nTuples = new NTuples(nTupleInfos);
-            var valueFunc = new ValueFunction<float>(nTuples);
+            ValueFunction<float> valueFunc;
+            if (args.Length > 0)
+                valueFunc = ValueFunction<float>.LoadFromFile(args[0]);
+            else
+            {
+                var nTupleInfos = Enumerable.Range(0, 12).Select(_ => new NTupleInfo(10)).ToArray();
+                var nTuples = new NTupleGroup(nTupleInfos);
+                valueFunc = new ValueFunction<float>(nTuples);
+            }
             var slTrainer = new SupervisedTrainer<float>("AG01", valueFunc, new SupervisedTrainerConfig<float>());
             (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN");
             sw.Start();
@@ -107,7 +116,7 @@ namespace KalmiaZero
             if (args.Length > 1 && args[1] == "zero")
                 valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
 
-            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 100000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.9f});
+            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 100000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.5f });
             sw.Start();
             tdTrainer.Train();
             sw.Stop();

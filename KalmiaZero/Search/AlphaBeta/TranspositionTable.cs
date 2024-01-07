@@ -19,6 +19,8 @@ namespace KalmiaZero.Search.AlphaBeta
         public byte Depth;
         public byte Generation;
 
+        public readonly bool HasBestMove => this.Lower == this.Upper;
+
         public TTEntry() { }
     }
 
@@ -62,7 +64,7 @@ namespace KalmiaZero.Search.AlphaBeta
 
         public TranspositionTable(long size)
         {
-            var numClusters = size / (long)Marshal.SizeOf<TTCluster>();
+            var numClusters = size / Marshal.SizeOf<TTCluster>();
             this.size = 1L << Math.ILogB(numClusters);
             this.tt = new TTCluster[this.size];
             this.generation = 0;
@@ -76,7 +78,9 @@ namespace KalmiaZero.Search.AlphaBeta
 
         public void Resize(long size)
         {
-            var newSize = 1L << Math.ILogB(size);
+            var numClusters = size / Marshal.SizeOf<TTCluster>();
+            var newSize = 1L << Math.ILogB(numClusters);
+
             if (this.size == newSize)
                 return;
 
@@ -130,6 +134,22 @@ namespace KalmiaZero.Search.AlphaBeta
 
             hit = false;
             return ref replace;
+        }
+
+        public void ProbePV(ref Position pos, List<BoardCoordinate> pv, int depth)
+        {
+            ref var entry = ref GetEntry(ref pos, out bool hit);
+
+            if (hit && entry.Generation == this.Generation && entry.Depth == depth && entry.Move != BoardCoordinate.Null)
+            {
+                pv.Add(entry.Move);
+                var move = pos.GenerateMove(entry.Move);
+                pos.Update(ref move);
+                if (pos.CanPass)
+                    pos.Pass();
+                ProbePV(ref pos, pv, depth - 1);
+                pos.Undo(ref move);
+            }
         }
 
         int GetPenalizedDepth(ref TTEntry entry) => entry.Generation - (this.generation - entry.Generation);

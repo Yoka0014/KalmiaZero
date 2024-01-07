@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 using KalmiaZero.Evaluation;
@@ -32,13 +33,15 @@ namespace KalmiaZero.Engines
             this.Options.Add("end_depth", new EngineOption(6, 1, Constants.NUM_SQUARES - 4));
 
             var option = new EngineOption(1024, 64, long.MaxValue);
-            option.ValueChanged += (_, e) => this.searcher?.SetTranspositionTableSize((long)(e.CurrentValue * 1024L * 1024L));
+            option.ValueChanged += (_, e) => this.searcher?.SetTranspositionTableSize((long)(e * 1024L * 1024L));
             this.Options.Add("tt_size_mib", option);
 
             var weightsPath = Path.Combine(PARAMS_DIR, DEFAULT_VALUE_FUNC_WEIGHTS_FILE_NAME);
             option = new EngineOption(weightsPath, EngineOptionType.FileName);
             option.ValueChanged += OnValueFuncWeightsPathSpecified;
             this.Options.Add("value_func_weights_path", option);
+
+            this.Options["show_search_info_interval_cs"] = new EngineOption(10, 0, 6000); 
         }
 
         public override void Quit()
@@ -174,6 +177,8 @@ namespace KalmiaZero.Engines
                 long ttSize = this.Options["tt_size_mib"].CurrentValue * 1024L * 1024L;
                 this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(valueFuncWeightsPath), ttSize);
                 this.searcher.SetRootPos(this.Position);
+                this.searcher.PVWasUpdated += (s, e) => SendThinkInfo(SearchResultToThinkInfo(ref e));
+                this.searcher.PVWasUpdated += (s, e) => SendMultiPV(new List<MultiPVItem> { SearchResultToMultiPVItem(ref e) });
             }
             catch (InvalidDataException ex)
             {
@@ -206,6 +211,8 @@ namespace KalmiaZero.Engines
                 long ttSize = this.Options["tt_size_mib"].CurrentValue * 1024L * 1024L;
                 this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(path), ttSize);
                 this.searcher.SetRootPos(this.Position);
+                this.searcher.PVWasUpdated += (s, e) => SendThinkInfo(SearchResultToThinkInfo(ref e));
+                this.searcher.PVWasUpdated += (s, e) => SendMultiPV(new List<MultiPVItem> { SearchResultToMultiPVItem(ref e) });
             }
             catch (InvalidDataException ex)
             {
@@ -223,22 +230,14 @@ namespace KalmiaZero.Engines
             else
                 depth = (int)this.Options["end_depth"].CurrentValue;
 
+            this.searcher.PVNotificationIntervalMs = (int)this.Options["show_search_info_interval_cs"].CurrentValue * 10;
             this.searchTask = this.searcher.SearchAsync(depth, searchEndCallback);
 
             void searchEndCallback(SearchResult searchRes)
             {
-                var score = searchRes.EvalScore * 100.0f;
-
-                SendThinkInfo(new ThinkInfo(new BoardCoordinate[] { searchRes.BestMove })
-                {
-                    Depth = depth,
-                    EvalScore = score,
-                    NodeCount = this.searcher?.NodeCount,
-                    Nps = this.searcher?.Nps,
-                    EllpasedMs = this.searcher?.SearchEllapsedMs
-                });
-
-                SendMove(new EngineMove(searchRes.BestMove, score, EvalScoreType.WinRate, this.searcher?.SearchEllapsedMs));
+                SendThinkInfo(SearchResultToThinkInfo(ref searchRes));
+                SendMultiPV(new List<MultiPVItem> { SearchResultToMultiPVItem(ref searchRes) });
+                SendMove(new EngineMove(searchRes.BestMove, searchRes.EvalScore * 100.0, EvalScoreType.WinRate, searchRes.EllpasedMs));
             }
         }
 
@@ -256,6 +255,29 @@ namespace KalmiaZero.Engines
                 return true;
             }
             return false;
+        }
+
+        ThinkInfo SearchResultToThinkInfo(ref SearchResult res)
+        {
+            return new ThinkInfo(res.PV)
+            {
+                Depth = res.Depth,
+                NodeCount = res.NodeCount,
+                Nps = (double)res.NodeCount / res.EllpasedMs,
+                EvalScore = res.EvalScore * 100.0,
+                EllpasedMs = res.EllpasedMs
+            };
+        }
+
+        MultiPVItem SearchResultToMultiPVItem(ref SearchResult res)
+        {
+            return new MultiPVItem(res.PV)
+            {
+                Depth = res.Depth,
+                NodeCount = res.NodeCount,
+                EvalScore = res.EvalScore * 100.0,
+                EvalScoreType = EvalScoreType.WinRate,
+            };
         }
     }
 }
