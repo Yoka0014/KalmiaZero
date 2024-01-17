@@ -78,5 +78,15 @@ namespace KalmiaZero.Learn
             var testData = allData.Skip(trainData.Length).Take(numTestData).ToArray();
             return (trainData, testData);
         }
+
+        public static (TrainData[] trainData, TrainData[] testData) SplitIntoTrainAndTest(TrainData[] data, double testSize=0.1)
+        {
+            var allData = (TrainData[])data.Clone();
+            Random.Shared.Shuffle(allData);
+            var numTestData = (int)(allData.Length * testSize);
+            var trainData = allData.Take(allData.Length - numTestData).ToArray();
+            var testData = allData.Skip(trainData.Length).Take(numTestData).ToArray();
+            return (trainData, testData);
+        }
     }
 }

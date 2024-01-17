@@ -1,17 +1,18 @@
 ﻿//#define VALUE_GREEDY_ENGINE
 //#define PUCT_ENGINE
-#define ALPHA_BETA_ENGINE
+//#define ALPHA_BETA_ENGINE
 //#define ENDGAME_TEST
 //#define PUCT_PERFT
 //#define SL
 //#define RL
 //#define MULTI_RL
-//#define MT_RL
+//#define TDL_RL
 //#define SL_GA
 //#define TD_GA
 //#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
-//#define DEV_TEST
+//#define EDAX_NTUPLE
+#define DEV_TEST
 
 using System;
 using KalmiaZero.Reversi;
@@ -31,6 +32,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Threading;
 using KalmiaZero.Search.AlphaBeta;
+using System.Text.Json;
 
 namespace KalmiaZero
 {
@@ -132,28 +134,25 @@ namespace KalmiaZero
             Console.WriteLine(sw.ElapsedMilliseconds);
 #endif
 
-#if MT_RL
+#if TDL_RL
             var sw = new Stopwatch();
-
-            ValueFunction<float> valueFunc;
+            ValueFunction<MiniMaxType> valueFunc;
 
             if (args.Length > 0)
-                valueFunc = ValueFunction<float>.LoadFromFile(args[0]);
+                valueFunc = ValueFunction<MiniMaxType>.LoadFromFile(args[0]);
             else
             {
                 var nTupleInfos = Enumerable.Range(0, 12).Select(_ => new NTupleInfo(10)).ToArray();
-                var nTuples = new NTuples(nTupleInfos);
-                valueFunc = new ValueFunction<float>(nTuples);
+                var nTuples = new NTupleGroup(nTupleInfos);
+                valueFunc = new ValueFunction<MiniMaxType>(nTuples);
             }
 
-            var trainer = new MTTDTrainer<float>(valueFunc, new MTTDTrainerConfig<float>
-            {
-                NumEpisodes = 5000000,
-                NumThreads = 1
-            });
+            if (args.Length > 1 && args[1] == "zero")
+                valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
 
+            var tdTrainer = new TDLeafTrainer("AG01", valueFunc, new TDLeafTrainerConfig() { NumEpisodes = 5000000, EligibilityTraceFactor = 0.7f });
             sw.Start();
-            trainer.Train();
+            tdTrainer.Train();
             sw.Stop();
             Console.WriteLine(sw.ElapsedMilliseconds);
 #endif
@@ -211,34 +210,47 @@ namespace KalmiaZero
             var path = (args.Length >= 3) ? args[2] : "value_func_ga.bin";
             new ValueFunction<float>(nTuples).SaveToFile(path);
 #endif
+
+#if EDAX_NTUPLE
+            var edaxNTuples = new NTupleInfo[12]
+            {
+                // corner3x3 
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A1, BoardCoordinate.B1, BoardCoordinate.A2, BoardCoordinate.B2, BoardCoordinate.C1, BoardCoordinate.A3, BoardCoordinate.C2, BoardCoordinate.B3, BoardCoordinate.C3 }),
+                // corner edge x 
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A5, BoardCoordinate.A4, BoardCoordinate.A3, BoardCoordinate.A2, BoardCoordinate.A1, BoardCoordinate.B2, BoardCoordinate.B1, BoardCoordinate.C1, BoardCoordinate.D1, BoardCoordinate.E1 }),
+                // edge 2x 
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.B2, BoardCoordinate.A1, BoardCoordinate.B1, BoardCoordinate.C1, BoardCoordinate.D1, BoardCoordinate.E1, BoardCoordinate.F1, BoardCoordinate.G1, BoardCoordinate.H1, BoardCoordinate.G2 }),
+                // edge4x2 2x 
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A1, BoardCoordinate.C1, BoardCoordinate.D1, BoardCoordinate.C2, BoardCoordinate.D2, BoardCoordinate.E2, BoardCoordinate.F2, BoardCoordinate.E1, BoardCoordinate.F1, BoardCoordinate.H1 }),
+                // horizontal and vertical line (row = 2 or column = 2)
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A2, BoardCoordinate.B2, BoardCoordinate.C2, BoardCoordinate.D2, BoardCoordinate.E2, BoardCoordinate.F2, BoardCoordinate.G2, BoardCoordinate.H2 }),
+                // horizontal and vertical line (row = 3 or column = 3)
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A3, BoardCoordinate.B3, BoardCoordinate.C3, BoardCoordinate.D3, BoardCoordinate.E3, BoardCoordinate.F3, BoardCoordinate.G3, BoardCoordinate.H3 }),
+                // horizontal and vertical line (row = 4 or column = 4)
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A4, BoardCoordinate.B4, BoardCoordinate.C4, BoardCoordinate.D4, BoardCoordinate.E4, BoardCoordinate.F4, BoardCoordinate.G4, BoardCoordinate.H4 }),
+                // diagonal line 8
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.A1, BoardCoordinate.B2, BoardCoordinate.C3, BoardCoordinate.D4, BoardCoordinate.E5, BoardCoordinate.F6, BoardCoordinate.G7, BoardCoordinate.H8 }),
+                // diagonal line 7
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.B1, BoardCoordinate.C2, BoardCoordinate.D3, BoardCoordinate.E4, BoardCoordinate.F5, BoardCoordinate.G6, BoardCoordinate.H7 }),
+                // diagonal line 6
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.C1, BoardCoordinate.D2, BoardCoordinate.E3, BoardCoordinate.F4, BoardCoordinate.G5, BoardCoordinate.H6 }),
+                // diagonal line 5
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.D1, BoardCoordinate.E2, BoardCoordinate.F3, BoardCoordinate.G4, BoardCoordinate.H5 }),
+                // diagonal line 4
+                new NTupleInfo(new BoardCoordinate[] { BoardCoordinate.D1, BoardCoordinate.C2, BoardCoordinate.B3, BoardCoordinate.A4 }),
+            };
+
+            var nTuples = new NTupleGroup(edaxNTuples);
+            var valueFunc = new ValueFunction<float>(nTuples);
+            valueFunc.SaveToFile("value_func_edax.bin");
+#endif
         }
 
         static void DevTest()
         {
-            using var sr = new StreamReader("train_data.txt");
-            var lineCount = 0;
-            while(sr.Peek() != -1)
-            {
-                lineCount++;
-                var line = sr.ReadLine();
-                var pos = new Position();
-                for(var i = 0; i < line.Length; i += 2)
-                {
-                    if (pos.CanPass)
-                        pos.Pass();
-
-                    var str = line[i..(i + 2)];
-                    var coord = Reversi.Utils.ParseCoordinate(str);
-                    if (!pos.IsLegalMoveAt(coord))
-                    {
-                        Console.WriteLine($"illegal: {lineCount}");
-                        return;
-                    }
-                    var move = pos.GenerateMove(coord);
-                    pos.Update(ref move);
-                }
-            }
-            Console.WriteLine(lineCount);
+            var nTupleInfos = Enumerable.Range(0, 12).Select(_ => new NTupleInfo(10)).ToArray();
+            var nTuples = new NTupleGroup(nTupleInfos);
+            var valueFunc = new ValueFunction<float>(nTuples, 4);
         }
     }
 }

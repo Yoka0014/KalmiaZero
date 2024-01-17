@@ -142,7 +142,7 @@ namespace KalmiaZero.Engines
         {
             StopIfPondering();
             this.searchTask?.Wait();
-            this.searcher?.UpdateRootPos(this.MoveHistory[^1].Coord);
+            this.searcher?.UpdateRootGame(this.MoveHistory[^1].Coord);
         }
 
         protected override void OnUndidPosition()
@@ -175,7 +175,7 @@ namespace KalmiaZero.Engines
             try
             {
                 long ttSize = this.Options["tt_size_mib"].CurrentValue * 1024L * 1024L;
-                this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(valueFuncWeightsPath), ttSize);
+                this.searcher = new Searcher(ValueFunction<MiniMaxType>.LoadFromFile(valueFuncWeightsPath), ttSize);
                 this.searcher.SetRootPos(this.Position);
                 this.searcher.PVWasUpdated += (s, e) => SendThinkInfo(SearchResultToThinkInfo(ref e));
                 this.searcher.PVWasUpdated += (s, e) => SendMultiPV(new List<MultiPVItem> { SearchResultToMultiPVItem(ref e) });
@@ -209,7 +209,7 @@ namespace KalmiaZero.Engines
             try
             {
                 long ttSize = this.Options["tt_size_mib"].CurrentValue * 1024L * 1024L;
-                this.searcher = new Searcher(ValueFunction<AlphaBetaEvalType>.LoadFromFile(path), ttSize);
+                this.searcher = new Searcher(ValueFunction<MiniMaxType>.LoadFromFile(path), ttSize);
                 this.searcher.SetRootPos(this.Position);
                 this.searcher.PVWasUpdated += (s, e) => SendThinkInfo(SearchResultToThinkInfo(ref e));
                 this.searcher.PVWasUpdated += (s, e) => SendMultiPV(new List<MultiPVItem> { SearchResultToMultiPVItem(ref e) });

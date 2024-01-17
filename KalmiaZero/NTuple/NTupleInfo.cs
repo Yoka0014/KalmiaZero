@@ -204,8 +204,8 @@ namespace KalmiaZero.NTuple
         public readonly ReadOnlySpan<FeatureType> GetOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
         public readonly ReadOnlySpan<FeatureType> GetMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
 
-        internal readonly FeatureType[] GetOpponentFeatureRawTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
-        internal readonly FeatureType[] GetMirroredFeatureRawTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
+        internal readonly FeatureType[] GetRawOpponentFeatureTable(int nTupleID) => this.TO_OPPONENT_FEATURE[nTupleID];
+        internal readonly FeatureType[] GetRawMirroredFeatureTable(int nTupleID) => this.TO_MIRRORED_FEATURE[nTupleID];
 
         void InitPowTable()
         {

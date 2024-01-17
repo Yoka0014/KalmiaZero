@@ -7,7 +7,7 @@ using KalmiaZero.Search.MCTS;
 
 namespace KalmiaZero.Search
 {
-    internal struct GameInfo
+    public struct GameInfo
     {
         public Position Position;
         public PositionFeatureVector FeatureVector;
@@ -43,7 +43,7 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Update(ref Move move, Edge[] edges)
+        internal void Update(ref Move move, Edge[] edges)
         {
             this.Position.Update(ref move);
             InitMoves(edges);
@@ -59,7 +59,7 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Pass(Edge[] edges)
+        internal void Pass(Edge[] edges)
         {
             this.Position.Pass();
             InitMoves(edges);
@@ -84,7 +84,7 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Undo(ref Move move, Edge[] edges)
+        internal void Undo(ref Move move, Edge[] edges)
         {
             this.Position.Undo(ref move);
             InitMoves(edges);

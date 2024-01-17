@@ -91,11 +91,11 @@ namespace KalmiaZero.Search.AlphaBeta
 
         public void IncrementGeneration() => this.generation += GEN_INC;
 
-        public void SaveAt(ref TTEntry entry, ref Position pos, AlphaBetaEvalType lower, AlphaBetaEvalType upper, int depth)
+        public void SaveAt(ref TTEntry entry, ref Position pos, MiniMaxType lower, MiniMaxType upper, int depth)
             => SaveAt(ref entry, ref pos, BoardCoordinate.Null, lower, upper, depth);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SaveAt(ref TTEntry entry, ref Position pos, BoardCoordinate move, AlphaBetaEvalType lower, AlphaBetaEvalType upper, int depth)
+        public void SaveAt(ref TTEntry entry, ref Position pos, BoardCoordinate move, MiniMaxType lower, MiniMaxType upper, int depth)
         {
             entry.Position = pos.GetBitboard();
             entry.Move = move;

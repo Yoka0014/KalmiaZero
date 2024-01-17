@@ -252,8 +252,8 @@ namespace KalmiaZero.Learn
                     var w = weights + offset;
                     var wg = weightGrads + offset;
                     ref Feature feature = ref this.featureVec.GetFeature(nTupleID);
-                    fixed (FeatureType* opp = this.valueFunc.NTuples.GetOpponentFeatureRawTable(nTupleID))
-                    fixed (FeatureType* mirror = this.featureVec.NTuples.GetMirroredFeatureRawTable(nTupleID))
+                    fixed (FeatureType* opp = this.valueFunc.NTuples.GetRawOpponentFeatureTable(nTupleID))
+                    fixed (FeatureType* mirror = this.featureVec.NTuples.GetRawMirroredFeatureTable(nTupleID))
                     {
                         for (var k = 0; k < feature.Length; k++)
                         {

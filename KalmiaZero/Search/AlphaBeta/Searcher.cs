@@ -1,7 +1,6 @@
-﻿global using AlphaBetaEvalType = System.Single;
+﻿global using MiniMaxType = System.Single;
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -20,7 +19,7 @@ namespace KalmiaZero.Search.AlphaBeta
     public readonly struct SearchResult 
     {
         public BoardCoordinate BestMove { get; }
-        public AlphaBetaEvalType EvalScore { get; }
+        public MiniMaxType EvalScore { get; }
         public int Depth { get; }
         public ulong NodeCount { get; }
         public int EllpasedMs { get; }
@@ -28,7 +27,7 @@ namespace KalmiaZero.Search.AlphaBeta
 
         readonly List<BoardCoordinate> pv;
 
-        public SearchResult(BoardCoordinate bestMove, AlphaBetaEvalType evalScore, int depth, ulong nodeCount, int ellpasedMs, List<BoardCoordinate> pv)
+        public SearchResult(BoardCoordinate bestMove, MiniMaxType evalScore, int depth, ulong nodeCount, int ellpasedMs, List<BoardCoordinate> pv)
         {
             this.BestMove = bestMove;
             this.EvalScore = evalScore;
@@ -142,11 +141,11 @@ namespace KalmiaZero.Search.AlphaBeta
 
     public class Searcher
     {
-        const AlphaBetaEvalType SCORE_MIN = 0;
-        const AlphaBetaEvalType SCORE_MAX = 1;
-        const AlphaBetaEvalType INVALID_SCORE = -1;
-        const AlphaBetaEvalType NULL_WINDOW_WIDTH = (AlphaBetaEvalType)1.0e-7;
-        const AlphaBetaEvalType TT_HIT_BONUS = 50;
+        const MiniMaxType SCORE_MIN = 0;
+        const MiniMaxType SCORE_MAX = 1;
+        const MiniMaxType INVALID_SCORE = -1;
+        const MiniMaxType NULL_WINDOW_WIDTH = (MiniMaxType)1.0e-7;
+        const MiniMaxType TT_HIT_BONUS = 50;
         const int ID_DEPTH_MIN = 4;
         const int MIDGAME_SHALLOW_DEPTH = 3;
         const int ENDGAME_SHALLOW_DEPTH = 7;
@@ -162,26 +161,19 @@ namespace KalmiaZero.Search.AlphaBeta
 
         volatile bool isSearching;
 
-        Position rootPos;
+        GameInfo rootGame;
+        GameInfo gameForSearch;
         readonly TranspositionTable tt;
-        ValueFunction<AlphaBetaEvalType> valueFunc;
+        ValueFunction<MiniMaxType> valueFunc;
 
         CancellationTokenSource? cts;
 
-        public Searcher(ValueFunction<AlphaBetaEvalType> valueFunc, long ttSize)
+        public Searcher(ValueFunction<MiniMaxType> valueFunc, long ttSize)
         {
             this.valueFunc = valueFunc;
+            this.rootGame = new GameInfo(this.valueFunc.NTuples);
+            this.gameForSearch = new GameInfo(this.valueFunc.NTuples);
             this.tt = new TranspositionTable(ttSize);
-        }
-
-        public void SetValueFunction(ValueFunction<AlphaBetaEvalType> valueFunc, bool clearTT)
-        {
-            if (this.isSearching)
-                throw new InvalidOperationException("Cannot change value function while searching.");
-
-            this.valueFunc = valueFunc;
-            if (clearTT)
-                this.tt.Clear();
         }
 
         public void SendStopSearchSignal() => this.cts?.Cancel();
@@ -190,23 +182,46 @@ namespace KalmiaZero.Search.AlphaBeta
 
         public void SetRootPos(Position pos)
         {
-            this.rootPos = pos;
+            var game = new GameInfo(pos, this.valueFunc.NTuples);
+            SetRootGame(ref game);
+        }
+
+        public void SetRootGame(ref GameInfo game)
+        {
+            game.CopyTo(ref this.rootGame);
             this.tt.Clear();
         }
 
-        public bool UpdateRootPos(BoardCoordinate move)
+        public bool UpdateRootGame(BoardCoordinate moveCoord)
         {
-            if (!this.rootPos.Update(move))
+            if (!this.rootGame.Position.IsLegalMoveAt(moveCoord))
                 return false;
 
-            this.tt.IncrementGeneration();
+            var move = this.rootGame.Position.GenerateMove(moveCoord);
+            UpdateRootGame(ref move);
+
             return true;
+        }
+
+        public void UpdateRootGame(ref Move move)
+        {
+            if (move.Coord != BoardCoordinate.Pass)
+                this.rootGame.Update(ref move);
+            else
+                this.rootGame.Pass();
+            this.tt.IncrementGeneration();
+        }
+
+        public void PassRootGame()
+        {
+            this.rootGame.Pass();
+            this.tt.IncrementGeneration();
         }
 
         public List<BoardCoordinate> CreatePVList(ref PV pv, int maxDepth)
         {
             var pvList = pv.ToList();
-            var pos = this.rootPos;
+            var pos = this.rootGame.Position;
 
             // 置換表を用いることで，葉ノードまで探索せずに切り上げている場合がある．
             // その場合は，残りのPVを置換表から探す．
@@ -239,7 +254,7 @@ namespace KalmiaZero.Search.AlphaBeta
             this.isSearching = true;
 
             BoardCoordinate bestMove;
-            AlphaBetaEvalType score;
+            MiniMaxType score;
             var ellapsedMs = 0;
             var pv = new PV();
             int depth;
@@ -295,16 +310,17 @@ namespace KalmiaZero.Search.AlphaBeta
             return new SearchResult(bestMove, score, depth, nodeCount, ellapsedMs, CreatePVList(ref pv, depth));
         }
 
-        (BoardCoordinate move, AlphaBetaEvalType evalScore) SearchRoot(int depth, BoardCoordinate prevBestMove, ref PV pv, out bool suspended)
+        (BoardCoordinate move, MiniMaxType evalScore) SearchRoot(int depth, BoardCoordinate prevBestMove, ref PV pv, out bool suspended)
         {
             suspended = false;
 
-            var game = new GameInfo(this.rootPos, this.valueFunc.NTuples);
+            var game = this.gameForSearch;
+            this.rootGame.CopyTo(ref game);
 
             if (game.Moves.Length == 0) // pass
             {
                 this.isSearching = false;
-                return (BoardCoordinate.Pass, AlphaBetaEvalType.NaN);
+                return (BoardCoordinate.Pass, MiniMaxType.NaN);
             }
 
             // 着手の列挙．
@@ -337,7 +353,7 @@ namespace KalmiaZero.Search.AlphaBeta
             var bestMove = moves[0].Coord;
             pv.AddMove(bestMove);
             game.Update(ref moves[0]);
-            AlphaBetaEvalType alpha = SCORE_MIN, beta = SCORE_MAX, score;
+            MiniMaxType alpha = SCORE_MIN, beta = SCORE_MAX, score;
             bool stopFlag;
             if(!endgame)
                 score = 1 - GoDown<False>(ref game, 1 - beta, 1 - alpha, ref pv, depth - 1, out stopFlag);
@@ -425,7 +441,7 @@ namespace KalmiaZero.Search.AlphaBeta
             return (bestMove, alpha);
         }
 
-        AlphaBetaEvalType GoDown<Endgame>(ref GameInfo game, AlphaBetaEvalType alpha, AlphaBetaEvalType beta, ref PV pv, int depth, out bool stopFlag)
+        MiniMaxType GoDown<Endgame>(ref GameInfo game, MiniMaxType alpha, MiniMaxType beta, ref PV pv, int depth, out bool stopFlag)
             where Endgame : struct, IFlag
         {
             Debug.Assert(alpha <= beta);
@@ -457,7 +473,7 @@ namespace KalmiaZero.Search.AlphaBeta
         }
 
         [SkipLocalsInit]
-        AlphaBetaEvalType SearchWithTT<Endgame, AfterPass>(ref GameInfo game, AlphaBetaEvalType alpha, AlphaBetaEvalType beta, ref PV pv, int depth, out bool stopFlag)
+        MiniMaxType SearchWithTT<Endgame, AfterPass>(ref GameInfo game, MiniMaxType alpha, MiniMaxType beta, ref PV pv, int depth, out bool stopFlag)
             where Endgame : struct, IFlag where AfterPass : struct, IFlag
         {
             stopFlag = false;
@@ -466,8 +482,8 @@ namespace KalmiaZero.Search.AlphaBeta
             ref var entry = ref this.tt.GetEntry(ref game.Position, out bool hit);
             if (hit && entry.Generation == this.tt.Generation && entry.Depth == depth)
             {
-                var upper = (AlphaBetaEvalType)entry.Upper;
-                var lower = (AlphaBetaEvalType)entry.Lower;
+                var upper = (MiniMaxType)entry.Upper;
+                var lower = (MiniMaxType)entry.Lower;
                 var ret = INVALID_SCORE;
                 if (alpha >= upper)
                     ret = upper;
@@ -499,7 +515,7 @@ namespace KalmiaZero.Search.AlphaBeta
                 game.Pass();
 
                 // パスはそのまま1手先を読む(深さは消費しない)．
-                AlphaBetaEvalType ret;
+                MiniMaxType ret;
                 if (typeof(Endgame) == typeof(False))
                     ret = 1 - SearchWithTT<False, True>(ref game, 1 - beta, 1 - alpha, ref pv, depth, out stopFlag);
                 else
@@ -545,7 +561,7 @@ namespace KalmiaZero.Search.AlphaBeta
 
             // 頭の着手が最善手だと仮定.
             var bestMove = moves[0].Coord;
-            AlphaBetaEvalType maxScore, score, a = alpha;  
+            MiniMaxType maxScore, score, a = alpha;  
             game.Update(ref moves[0]);
             pv.AddMove(bestMove);
 
@@ -649,7 +665,7 @@ namespace KalmiaZero.Search.AlphaBeta
         }
 
         [SkipLocalsInit]
-        AlphaBetaEvalType SearchShallow<AfterPass>(ref GameInfo game, AlphaBetaEvalType alpha, AlphaBetaEvalType beta, ref PV pv, int depth, out bool stopFlag) where AfterPass : struct, IFlag
+        MiniMaxType SearchShallow<AfterPass>(ref GameInfo game, MiniMaxType alpha, MiniMaxType beta, ref PV pv, int depth, out bool stopFlag) where AfterPass : struct, IFlag
         {
             stopFlag = false;
 
@@ -689,7 +705,7 @@ namespace KalmiaZero.Search.AlphaBeta
 
             var currentPV = new PV();
             var bestMove = BoardCoordinate.Null;
-            AlphaBetaEvalType maxScore = SCORE_MIN;
+            MiniMaxType maxScore = SCORE_MIN;
             for (var i = 0; i < numMoves; i++)
             {
                 ref var move = ref moves[i];
@@ -753,7 +769,7 @@ namespace KalmiaZero.Search.AlphaBeta
 
         void OrderMidGameMoves<UseTT>(ref GameInfo game, Span<Move> moves) where UseTT : struct, IFlag
         {
-            Span<AlphaBetaEvalType> scores = stackalloc AlphaBetaEvalType[Constants.NUM_SQUARES];
+            Span<MiniMaxType> scores = stackalloc MiniMaxType[Constants.NUM_SQUARES];
             for (var i = 0; i < moves.Length; i++)
                 scores[(int)moves[i].Coord] = CalculateMoveValue<UseValueFunc, UseTT>(ref game, moves, i);
             SortMovesByScore(moves, scores);
@@ -761,7 +777,7 @@ namespace KalmiaZero.Search.AlphaBeta
 
         void OrderEndGameMoves<UseTT>(ref GameInfo game, Span<Move> moves) where UseTT : struct, IFlag
         {
-            Span<AlphaBetaEvalType> scores = stackalloc AlphaBetaEvalType[Constants.NUM_SQUARES];
+            Span<MiniMaxType> scores = stackalloc MiniMaxType[Constants.NUM_SQUARES];
             for (var i = 0; i < moves.Length; i++)
                 scores[(int)moves[i].Coord] = CalculateMoveValue<FastestFirst, UseTT>(ref game, moves, i);
             SortMovesByScore(moves, scores);
@@ -785,20 +801,21 @@ namespace KalmiaZero.Search.AlphaBeta
             }
         }
 
-        AlphaBetaEvalType EvaluateNode(ref GameInfo game)
+        MiniMaxType EvaluateNode(ref GameInfo game)
         {
             // 置換表にはHalf型で評価値を格納しているので，一旦評価関数の出力をHalfにキャストして桁落ちさせる.
             // 桁落ちさせないと，置換表を用いた枝刈りでバグる．
-            return (AlphaBetaEvalType)(Half)this.valueFunc.Predict(game.FeatureVector);
+            // MiniMaxTypeに再キャストする理由は，Halfのまま演算を行うと，毎回floatやdoubleにキャストされるため，演算が遅くなるから．
+            return (MiniMaxType)(Half)this.valueFunc.Predict(game.FeatureVector);
         }
 
-        AlphaBetaEvalType CalculateMoveValue<Policy, UseTT>(ref GameInfo game, Span<Move> moves, int idx) 
+        MiniMaxType CalculateMoveValue<Policy, UseTT>(ref GameInfo game, Span<Move> moves, int idx) 
             where Policy : struct, IMoveOrderingPolicy where UseTT : struct, IFlag
         {
             ref var move = ref moves[idx];
             game.Update(ref move);
 
-            AlphaBetaEvalType value = 0;
+            MiniMaxType value = 0;
 
             var hit = false;
             if (typeof(UseTT) == typeof(True))
@@ -806,8 +823,8 @@ namespace KalmiaZero.Search.AlphaBeta
                 ref var entry = ref this.tt.GetEntry(ref game.Position, out hit);
                 if (hit)
                 {
-                    var lower = 1 - (AlphaBetaEvalType)entry.Lower;
-                    var upper = 1 - (AlphaBetaEvalType)entry.Upper;
+                    var lower = 1 - (MiniMaxType)entry.Lower;
+                    var upper = 1 - (MiniMaxType)entry.Upper;
                     var genDiff = this.tt.Generation - entry.Generation;
                     if (lower != SCORE_MIN)
                         value = TT_HIT_BONUS - genDiff + lower;
@@ -823,7 +840,7 @@ namespace KalmiaZero.Search.AlphaBeta
                 if (typeof(Policy) == typeof(UseValueFunc))
                     value = 1 - this.valueFunc.Predict(game.FeatureVector);
                 else if (typeof(Policy) == typeof(FastestFirst))
-                    value = (AlphaBetaEvalType)1 / game.Position.GetNumNextMoves();
+                    value = (MiniMaxType)1 / game.Position.GetNumNextMoves();
             }
 
             game.Undo(ref move, moves);
@@ -831,10 +848,10 @@ namespace KalmiaZero.Search.AlphaBeta
             return value;
         }
 
-        static AlphaBetaEvalType DiscDiffToScore(int score)
+        static MiniMaxType DiscDiffToScore(int score)
         {
             if (score == 0)
-                return (AlphaBetaEvalType)0.5;
+                return (MiniMaxType)0.5;
             return (score > 0) ? 1 : 0;
         }
 

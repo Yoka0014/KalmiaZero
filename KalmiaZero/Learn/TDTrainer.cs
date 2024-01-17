@@ -149,9 +149,9 @@ namespace KalmiaZero.Learn
 
         void WriteParams(double explorationRate)
         {
+            this.logger.WriteLine($"Lambda: {this.CONFIG.EligibilityTraceFactor}");
             this.logger.WriteLine($"ExplorationRate: {explorationRate}");
             this.logger.WriteLine($"MeanLearningRate: {CalcMeanLearningRate()}");
-            this.logger.WriteLine($"Bias: {this.valueFunc.Bias}");
         }
 
         WeightType CalcMeanLearningRate()
@@ -278,8 +278,8 @@ namespace KalmiaZero.Learn
                 var dwAbsSum = weightDeltaAbsSum + offset;
 
                 ref Feature feature = ref posFeatureVec.Features[i];
-                fixed (FeatureType* opp = posFeatureVec.NTuples.GetOpponentFeatureRawTable(i))
-                fixed (FeatureType* mirror = posFeatureVec.NTuples.GetMirroredFeatureRawTable(i))
+                fixed (FeatureType* opp = posFeatureVec.NTuples.GetRawOpponentFeatureTable(i))
+                fixed (FeatureType* mirror = posFeatureVec.NTuples.GetRawMirroredFeatureTable(i))
                 {
                     var reg = WeightType.One / WeightType.CreateChecked((posFeatureVec.NumNTuples + 1) * feature.Length);
                     for (var j = 0; j < feature.Length; j++)

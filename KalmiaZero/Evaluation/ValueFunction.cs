@@ -24,6 +24,7 @@ namespace KalmiaZero.Evaluation
         public ref WeightType BiasRef { get => ref this.bias; }
         WeightType bias;
 
+
         public WeightType[] Weights { get; private set; }
         public ReadOnlySpan<int> DiscColorOffset => this.discColorOffset;
         public ReadOnlySpan<int> NTupleOffset => this.nTupleOffset;
@@ -225,7 +226,7 @@ namespace KalmiaZero.Evaluation
                 {
                     var w = weights + this.nTupleOffset[nTupleID];
                     ref Feature feature = ref features[nTupleID];
-                    fixed (FeatureType* toOpp = this.NTuples.GetOpponentFeatureRawTable(nTupleID))
+                    fixed (FeatureType* toOpp = this.NTuples.GetRawOpponentFeatureTable(nTupleID))
                     {
                         for (var i = 0; i < feature.Length; i++)
                             x += w[toOpp[feature[i]]];
