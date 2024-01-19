@@ -2,6 +2,7 @@
   "profiles": {
     "KalmiaZero": {
       "commandName": "Project",
+      "commandLineArgs": "value_func_edax.bin zero\r\n",
       "workingDirectory": "C:\\Users\\yu_ok\\source\\repos\\KalmiaZero\\DebugWorkDir\\"
     }
   }

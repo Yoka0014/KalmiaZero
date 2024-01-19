@@ -19,30 +19,57 @@ namespace KalmiaZero.Evaluation
         const string LABEL_INVERSED = "oreZaimlaK";
         const int LABEL_SIZE = 10;
 
-        public NTupleGroup NTuples { get; }
-        public WeightType Bias { get => this.bias; set => this.bias = value; }
-        public ref WeightType BiasRef { get => ref this.bias; }
-        WeightType bias;
+        public int NumPhases { get; }
+        public int NumMovesPerPhase { get; }
+        public ReadOnlySpan<int> EmptySquareCountToPhase => this.emptyCountToPhase;
 
+        public NTupleGroup NTuples { get; }
 
         public WeightType[] Weights { get; private set; }
+        public WeightType[] Bias { get; private set; }  
         public ReadOnlySpan<int> DiscColorOffset => this.discColorOffset;
+        public ReadOnlySpan<int> PhaseOffset => this.phaseOffset;
         public ReadOnlySpan<int> NTupleOffset => this.nTupleOffset;
 
+        readonly int[] emptyCountToPhase;
         readonly int[] discColorOffset;
+        readonly int[] phaseOffset;
         readonly int[] nTupleOffset;
 
-        public ValueFunction(NTupleGroup nTuples)
+        public ValueFunction(NTupleGroup nTuples) : this(nTuples, 60) { }
+
+        public ValueFunction(NTupleGroup nTuples, int numMovesPerPhase)
         {
+            this.NumMovesPerPhase = numMovesPerPhase;
+            this.NumPhases = (Constants.NUM_SQUARES - 4) / numMovesPerPhase;
+            this.emptyCountToPhase = new int[Constants.NUM_SQUARES];
+            InitEmptyCountToPhaseTable();
+
             this.NTuples = nTuples;
-            this.Weights = new WeightType[2 * nTuples.NumPossibleFeatures.Sum()];
+            var numFeatures = nTuples.NumPossibleFeatures.Sum();
+            this.Weights = new WeightType[2 * this.NumPhases * numFeatures];
             this.discColorOffset = new int[2] { 0, this.Weights.Length / 2 };
-            this.Bias = WeightType.Zero;
+            this.Bias = new WeightType[this.NumPhases];
+
+            this.phaseOffset = new int[this.NumPhases];
+            for (var i = 0; i < this.phaseOffset.Length; i++)
+                this.phaseOffset[i] = i * numFeatures;
 
             this.nTupleOffset = new int[nTuples.Length];
             this.nTupleOffset[0] = 0;
             for (var i = 1; i < nTupleOffset.Length; i++)
                 this.nTupleOffset[i] += this.nTupleOffset[i - 1] + nTuples.NumPossibleFeatures[i - 1];
+        }
+
+        void InitEmptyCountToPhaseTable()
+        {
+            for (var phase = 0; phase < this.NumPhases; phase++)
+            {
+                var offset = phase * this.NumMovesPerPhase;
+                for (var i = 0; i < this.NumMovesPerPhase; i++)
+                    this.emptyCountToPhase[(Constants.NUM_SQUARES - 4) - offset - i] = phase;
+            }
+            this.emptyCountToPhase[0] = this.NumPhases - 1;
         }
 
         /*
@@ -52,8 +79,9 @@ namespace KalmiaZero.Evaluation
          * offset = 10: the number of N-Tuples
          * offset = 14: N-Tuple's coordinates
          * offset = M: the size of weight
-         * offset = M + 4: weights
-         * offset = -1: bias
+         * offset = M + 4: the number of phases 
+         * offset = M + 8: weights
+         * offset = M + 8 + N: bias
          */
         public static ValueFunction<WeightType> LoadFromFile(string filePath)
         {
@@ -82,39 +110,48 @@ namespace KalmiaZero.Evaluation
                 nTuples[i] = new NTupleInfo(coords);
             }
 
-            var valueFunc = new ValueFunction<WeightType>(new NTupleGroup(nTuples));
-
             // load weights
             fs.Read(buffer[..sizeof(int)], swapBytes);
             var weightSize = BitConverter.ToInt32(buffer);
             if (weightSize != 2 && weightSize != 4 && weightSize != 8)
                 throw new InvalidDataException($"The size {weightSize} is invalid for weight.");
 
-            var packedWeights = new WeightType[nTuples.Length][];
-            for (var nTupleID = 0; nTupleID < packedWeights.Length; nTupleID++)
+            fs.Read(buffer[..sizeof(int)], swapBytes);
+            var numMovesPerPhase = BitConverter.ToInt32(buffer);
+            var valueFunc = new ValueFunction<WeightType>(new NTupleGroup(nTuples), numMovesPerPhase);
+            var numPhases = valueFunc.NumPhases;
+
+            var packedWeights = Enumerable.Range(0, numPhases).Select(p => new WeightType[nTuples.Length][]).ToArray();
+            for (var phase = 0; phase < packedWeights.Length; phase++)
             {
-                fs.Read(buffer[..sizeof(int)], swapBytes);
-                var size = BitConverter.ToInt32(buffer);
-                var pw = packedWeights[nTupleID] = new WeightType[size];
-                for (var i = 0; i < pw.Length; i++)
+                for (var nTupleID = 0; nTupleID < packedWeights[phase].Length; nTupleID++)
                 {
-                    fs.Read(buffer[..weightSize], swapBytes);
-                    if (weightSize == 2)
-                        pw[i] = WeightType.CreateChecked(BitConverter.ToHalf(buffer));
-                    else if (weightSize == 4)
-                        pw[i] = WeightType.CreateChecked(BitConverter.ToSingle(buffer));
-                    else if (weightSize == 8)
-                        pw[i] = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
+                    fs.Read(buffer[..sizeof(int)], swapBytes);
+                    var size = BitConverter.ToInt32(buffer);
+                    var pw = packedWeights[phase][nTupleID] = new WeightType[size];
+                    for (var i = 0; i < pw.Length; i++)
+                    {
+                        fs.Read(buffer[..weightSize], swapBytes);
+                        if (weightSize == 2)
+                            pw[i] = WeightType.CreateChecked(BitConverter.ToHalf(buffer));
+                        else if (weightSize == 4)
+                            pw[i] = WeightType.CreateChecked(BitConverter.ToSingle(buffer));
+                        else if (weightSize == 8)
+                            pw[i] = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
+                    }
                 }
             }
 
-            fs.Read(buffer[..weightSize], swapBytes);
-            if (weightSize == 2)
-                valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToHalf(buffer));
-            else if (weightSize == 4)
-                valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToSingle(buffer));
-            else if (weightSize == 8)
-                valueFunc.Bias = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
+            for (var phase = 0; phase < numPhases; phase++)
+            {
+                fs.Read(buffer[..weightSize], swapBytes);
+                if (weightSize == 2)
+                    valueFunc.Bias[phase] = WeightType.CreateChecked(BitConverter.ToHalf(buffer));
+                else if (weightSize == 4)
+                    valueFunc.Bias[phase] = WeightType.CreateChecked(BitConverter.ToSingle(buffer));
+                else if (weightSize == 8)
+                    valueFunc.Bias[phase] = WeightType.CreateChecked(BitConverter.ToDouble(buffer));
+            }
 
             // expand weights
             valueFunc.Weights = valueFunc.ExpandPackedWeights(packedWeights);
@@ -150,7 +187,7 @@ namespace KalmiaZero.Evaluation
             }
             CopyWeightsBlackToWhite();
 
-            this.Bias = WeightType.Zero;
+            Array.Clear(this.Bias);
         }
 
         public void InitWeightsWithNormalRand(WeightType mu, WeightType sigma) => InitWeightsWithNormalRand(Random.Shared, mu, sigma);
@@ -172,7 +209,7 @@ namespace KalmiaZero.Evaluation
             }
             CopyWeightsBlackToWhite();
 
-            this.Bias = WeightType.Zero;
+            Array.Clear(this.Bias);
         }
 
         public void CopyWeightsBlackToWhite()
@@ -181,22 +218,29 @@ namespace KalmiaZero.Evaluation
             Span<WeightType> bWeights = Weights.AsSpan(0, whiteOffset);
             Span<WeightType> wWeights = Weights.AsSpan(whiteOffset);
 
-            for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+            for (var phase = 0; phase < this.NumPhases; phase++)
             {
-                var bw = bWeights[nTupleOffset[nTupleID]..];
-                var ww = wWeights[nTupleOffset[nTupleID]..];
-                ReadOnlySpan<FeatureType> toOpponent = this.NTuples.GetOpponentFeatureTable(nTupleID);
-                for (var feature = 0; feature < toOpponent.Length; feature++)
-                    ww[feature] = bw[toOpponent[feature]];
+                for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+                {
+                    var bw = bWeights[(this.PhaseOffset[phase] + this.nTupleOffset[nTupleID])..];
+                    var ww = wWeights[(this.PhaseOffset[phase] + this.nTupleOffset[nTupleID])..];
+                    ReadOnlySpan<FeatureType> toOpponent = this.NTuples.GetOpponentFeatureTable(nTupleID);
+                    for (var feature = 0; feature < toOpponent.Length; feature++)
+                        ww[feature] = bw[toOpponent[feature]];
+                }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public unsafe WeightType PredictLogit(PositionFeatureVector posFeatureVec)
         {
+            int phase;
+            fixed (int* toPhase = this.EmptySquareCountToPhase)
+                phase = toPhase[posFeatureVec.EmptySquareCount];
+
             var x = WeightType.Zero;
             fixed (int* discColorOffset = this.discColorOffset)
-            fixed (WeightType* weights = &this.Weights[discColorOffset[(int)posFeatureVec.SideToMove]])
+            fixed (WeightType* weights = &this.Weights[this.discColorOffset[(int)posFeatureVec.SideToMove] + this.phaseOffset[phase]])
             fixed (Feature* features = posFeatureVec.Features)
             {
                 for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
@@ -206,9 +250,12 @@ namespace KalmiaZero.Evaluation
                     for (var i = 0; i < feature.Length; i++)
                         x += w[feature[i]];
                 }
+
+                fixed (WeightType* bias = this.Bias)
+                    x += bias[phase];
             }
 
-            return x + this.Bias;
+            return x;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -217,9 +264,13 @@ namespace KalmiaZero.Evaluation
             if (posFeatureVec.SideToMove == DiscColor.Black)
                 return PredictLogit(posFeatureVec);
 
+            int phase;
+            fixed (int* toPhase = this.EmptySquareCountToPhase)
+                phase = toPhase[posFeatureVec.EmptySquareCount];
+
             var x = WeightType.Zero;
             fixed (int* discColorOffset = this.discColorOffset)
-            fixed (WeightType* weights = &this.Weights[discColorOffset[(int)DiscColor.Black]])
+            fixed (WeightType* weights = &this.Weights[this.discColorOffset[(int)DiscColor.Black] + this.phaseOffset[phase]])
             fixed (Feature* features = posFeatureVec.Features)
             {
                 for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
@@ -232,9 +283,12 @@ namespace KalmiaZero.Evaluation
                             x += w[toOpp[feature[i]]];
                     }
                 }
+
+                fixed (WeightType* bias = this.Bias)
+                    x += bias[phase];
             }
 
-            return x + this.Bias;
+            return x;
         }
 
         public WeightType Predict(PositionFeatureVector pfv) => StdSigmoid(PredictLogit(pfv));
@@ -249,8 +303,9 @@ namespace KalmiaZero.Evaluation
          * offset = 10: the number of N-Tuples
          * offset = 14: N-Tuple's coordinates
          * offset = M: the size of weight
-         * offset = M + 4: weights
-         * offset = -1: bias
+         * offset = M + 4: the number of moves per phase 
+         * offset = M + 8: weights
+         * offset = M + 8 + N: bias
          */
         public void SaveToFile(string filePath)
         {
@@ -273,58 +328,81 @@ namespace KalmiaZero.Evaluation
             var weightSize = Marshal.SizeOf<WeightType>();
             fs.Write(BitConverter.GetBytes(weightSize));
             Span<byte> weightBytes = stackalloc byte[weightSize];
-            for (var nTupleID = 0; nTupleID < packedWeights.Length; nTupleID++)
+
+            fs.Write(BitConverter.GetBytes(this.NumMovesPerPhase));
+
+            for (var phase = 0; phase < packedWeights.Length; phase++)
             {
-                var pw = packedWeights[nTupleID];
-                fs.Write(BitConverter.GetBytes(pw.Length));
-                foreach (var v in pw)
+                for (var nTupleID = 0; nTupleID < packedWeights[phase].Length; nTupleID++)
                 {
-                    if (typeof(WeightType) == typeof(Half))
-                        fs.Write(BitConverter.GetBytes(Half.CreateChecked(v)));
-                    else if (typeof(WeightType) == typeof(float))
-                        fs.Write(BitConverter.GetBytes(float.CreateChecked(v)));
-                    else if (typeof(WeightType) == typeof(double))
-                        fs.Write(BitConverter.GetBytes(double.CreateChecked(v)));
+                    var pw = packedWeights[phase][nTupleID];
+                    fs.Write(BitConverter.GetBytes(pw.Length));
+                    foreach (var v in pw)
+                    {
+                        if (typeof(WeightType) == typeof(Half))
+                            fs.Write(BitConverter.GetBytes(Half.CreateChecked(v)));
+                        else if (typeof(WeightType) == typeof(float))
+                            fs.Write(BitConverter.GetBytes(float.CreateChecked(v)));
+                        else if (typeof(WeightType) == typeof(double))
+                            fs.Write(BitConverter.GetBytes(double.CreateChecked(v)));
+                    }
                 }
             }
 
-            if (typeof(WeightType) == typeof(Half))
-                fs.Write(BitConverter.GetBytes(Half.CreateChecked(this.Bias)));
-            else if (typeof(WeightType) == typeof(float))
-                fs.Write(BitConverter.GetBytes(float.CreateChecked(this.Bias)));
-            else if (typeof(WeightType) == typeof(double))
-                fs.Write(BitConverter.GetBytes(double.CreateChecked(this.Bias)));
-        }
-
-        WeightType[][] PackWeights()
-        {
-            var packedWeights = (from _ in Enumerable.Range(0, this.NTuples.Length) select new List<WeightType>()).ToArray();
-            var numPossibleFeatures = this.NTuples.NumPossibleFeatures;
-            for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+            for (var phase = 0; phase < this.Bias.Length; phase++)
             {
-                var w = this.Weights.AsSpan(this.nTupleOffset[nTupleID], numPossibleFeatures[nTupleID]);
-                var pw = packedWeights[nTupleID];
-                ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
-                for (var feature = 0; feature < w.Length; feature++)
-                    if (feature <= mirror[feature])
-                        pw.Add(w[feature]);
+                if (typeof(WeightType) == typeof(Half))
+                    fs.Write(BitConverter.GetBytes(Half.CreateChecked(this.Bias[phase])));
+                else if (typeof(WeightType) == typeof(float))
+                    fs.Write(BitConverter.GetBytes(float.CreateChecked(this.Bias[phase])));
+                else if (typeof(WeightType) == typeof(double))
+                    fs.Write(BitConverter.GetBytes(double.CreateChecked(this.Bias[phase])));
             }
-            return packedWeights.Select(n => n.ToArray()).ToArray();
         }
 
-        WeightType[] ExpandPackedWeights(WeightType[][] packedWeights)
+        WeightType[][][] PackWeights()
         {
-            var weights = new WeightType[2 * this.NTuples.NumPossibleFeatures.Sum()];
-            for (var nTupleID = 0; nTupleID < nTupleOffset.Length; nTupleID++)
+            var packedWeights = new List<WeightType>[this.NumPhases][];
+            for (var i = 0; i < packedWeights.Length; i++)
+                packedWeights[i] = (from _ in Enumerable.Range(0, this.NTuples.Length) select new List<WeightType>()).ToArray();
+
+            var numPossibleFeatures = this.NTuples.NumPossibleFeatures;
+            for (var phase = 0; phase < this.NumPhases; phase++)
             {
-                var w = weights.AsSpan(nTupleOffset[nTupleID], this.NTuples.NumPossibleFeatures[nTupleID]);
-                var pw = packedWeights[nTupleID];
-                ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
-                var i = 0;
-                for (var feature = 0; feature < w.Length; feature++)
+                for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
                 {
-                    var mirrored = mirror[feature];
-                    w[feature] = feature <= mirrored ? pw[i++] : w[mirrored];
+                    var w = this.Weights.AsSpan(this.phaseOffset[phase] + this.nTupleOffset[nTupleID], numPossibleFeatures[nTupleID]);
+                    var pw = packedWeights[phase][nTupleID];
+                    ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                    for (var feature = 0; feature < w.Length; feature++)
+                        if (feature <= mirror[feature])
+                            pw.Add(w[feature]);
+                }
+            }
+
+            var ret = new WeightType[this.NumPhases][][];
+            for (var i = 0; i < ret.Length; i++)
+                ret[i] = packedWeights[i].Select(n => n.ToArray()).ToArray();
+            return ret;
+        }
+
+        WeightType[] ExpandPackedWeights(WeightType[][][] packedWeights)
+        {
+            var numPhases = packedWeights.Length;
+            var weights = new WeightType[2 * numPhases * this.NTuples.NumPossibleFeatures.Sum()];
+            for (var phase = 0; phase < numPhases; phase++)
+            {
+                for (var nTupleID = 0; nTupleID < this.nTupleOffset.Length; nTupleID++)
+                {
+                    var w = weights.AsSpan(this.phaseOffset[phase] + this.nTupleOffset[nTupleID], this.NTuples.NumPossibleFeatures[nTupleID]);
+                    var pw = packedWeights[phase][nTupleID];
+                    ReadOnlySpan<FeatureType> mirror = this.NTuples.GetMirroredFeatureTable(nTupleID);
+                    var i = 0;
+                    for (var feature = 0; feature < w.Length; feature++)
+                    {
+                        var mirrored = mirror[feature];
+                        w[feature] = feature <= mirrored ? pw[i++] : w[mirrored];
+                    }
                 }
             }
             return weights;

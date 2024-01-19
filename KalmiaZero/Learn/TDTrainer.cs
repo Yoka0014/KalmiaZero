@@ -48,9 +48,8 @@ namespace KalmiaZero.Learn
         readonly PastStatesBuffer pastStatesBuffer;
         readonly WeightType[] weightDeltaSum;
         readonly WeightType[] weightDeltaAbsSum;
-        WeightType biasDeltaSum;
-        WeightType biasDeltaAbsSum;
-        WeightType meanWeightDelta;
+        readonly WeightType[] biasDeltaSum;
+        readonly WeightType[] biasDeltaAbsSum;
 
         readonly Random rand;
 
@@ -74,6 +73,8 @@ namespace KalmiaZero.Learn
             var numWeights = valueFunc.Weights.Length;
             this.weightDeltaSum = new WeightType[numWeights];
             this.weightDeltaAbsSum = new WeightType[numWeights];
+            this.biasDeltaSum = new WeightType[valueFunc.NumPhases];
+            this.biasDeltaAbsSum = new WeightType[valueFunc.NumPhases];
             var capasity = int.CreateChecked(WeightType.Log(config.HorizonCutFactor, config.EligibilityTraceFactor)) + 1;
             this.pastStatesBuffer = new PastStatesBuffer(capasity, valueFunc.NTuples);
 
@@ -109,7 +110,8 @@ namespace KalmiaZero.Learn
             var tclEpsilon = WeightType.CreateChecked(TCL_EPSILON);
             Array.Fill(this.weightDeltaSum, tclEpsilon);
             Array.Fill(this.weightDeltaAbsSum, tclEpsilon);
-            this.biasDeltaSum = this.biasDeltaAbsSum = tclEpsilon;
+            Array.Fill(this.biasDeltaSum, tclEpsilon);
+            Array.Fill(this.biasDeltaAbsSum, tclEpsilon);
 
             WriteLabel();
             this.logger.WriteLine("Start learning.\n");
@@ -159,7 +161,10 @@ namespace KalmiaZero.Learn
             var sum = WeightType.Zero;
             foreach ((var n, var a) in this.weightDeltaSum.Zip(this.weightDeltaAbsSum))
                 sum += Decay(WeightType.Abs(n / a));
-            sum += Decay(this.biasDeltaSum / this.biasDeltaAbsSum);
+
+            foreach ((var n, var a) in this.biasDeltaSum.Zip(this.biasDeltaAbsSum))
+                sum += Decay(WeightType.Abs(n / a));
+
             return this.CONFIG.LearningRate * sum / WeightType.CreateChecked(this.weightDeltaSum.Length + 1);
         }
 
@@ -192,7 +197,7 @@ namespace KalmiaZero.Learn
 
                     if (game.Moves.Length == 0 && game.Position.IsGameOver)
                     {
-                        Fit(GetReward(game.Position.DiscDiff) - v);
+                        Adapt(GetReward(game.Position.DiscDiff) - v);
                         break;
                     }
 
@@ -223,43 +228,50 @@ namespace KalmiaZero.Learn
 
                     if (game.Moves.Length == 0 && game.Position.IsGameOver) // terminal state
                     {
-                        Fit(GetReward(game.Position.DiscDiff) - v);
+                        Adapt(GetReward(game.Position.DiscDiff) - v);
                         break;
                     }
 
                     nextV = WeightType.One - ValueFunction<WeightType>.StdSigmoid(minVLogit);
                 }
 
-                Fit(this.CONFIG.DiscountRate * nextV - v);
+                Adapt(this.CONFIG.DiscountRate * nextV - v);
                 this.pastStatesBuffer.Add(game.FeatureVector);
                 moveCount++;
             }
         }
 
-        unsafe void Fit(WeightType tdError)
+        unsafe void Adapt(WeightType tdError)
         {
             var alpha = this.CONFIG.LearningRate;
             var beta = this.CONFIG.TCLFactor;
             var eligibility = WeightType.One;
 
             fixed (WeightType* weights = this.valueFunc.Weights)
+            fixed (WeightType* bias = this.valueFunc.Bias)
             fixed (WeightType* weightDeltaSum = this.weightDeltaSum)
             fixed (WeightType* weightDeltaAbsSum = this.weightDeltaAbsSum)
+            fixed (WeightType* biasDeltaSum = this.biasDeltaSum)
+            fixed (WeightType* biasDeltaAbsSum = this.biasDeltaAbsSum)
             {
                 foreach (var posFeatureVec in this.pastStatesBuffer)
                 {
+                    int phase;
+                    fixed (int* toPhase = this.valueFunc.EmptySquareCountToPhase)
+                        phase = toPhase[posFeatureVec.EmptySquareCount];
+
                     var delta = eligibility * tdError;
                     if (posFeatureVec.SideToMove == DiscColor.Black)
-                        ApplyGradients<Black>(posFeatureVec, weights, weightDeltaSum, weightDeltaAbsSum, alpha, beta, delta);
+                        ApplyGradients<Black>(phase, posFeatureVec, weights, weightDeltaSum, weightDeltaAbsSum, alpha, beta, delta);
                     else
-                        ApplyGradients<White>(posFeatureVec, weights, weightDeltaSum, weightDeltaAbsSum, alpha, beta, delta);
+                        ApplyGradients<White>(phase, posFeatureVec, weights, weightDeltaSum, weightDeltaAbsSum, alpha, beta, delta);
 
                     var reg = WeightType.One / WeightType.CreateChecked(posFeatureVec.NumNTuples + 1);
-                    var lr = reg * alpha * Decay(WeightType.Abs(this.biasDeltaSum) / this.biasDeltaAbsSum);
+                    var lr = reg * alpha * Decay(WeightType.Abs(biasDeltaSum[phase]) / biasDeltaAbsSum[phase]);
                     var db = lr * delta;
-                    this.valueFunc.Bias += db;
-                    this.biasDeltaSum += db;
-                    this.biasDeltaAbsSum += WeightType.Abs(db);
+                    bias[phase] += db;
+                    biasDeltaSum[phase] += db;
+                    biasDeltaAbsSum[phase] += WeightType.Abs(db);
 
                     eligibility *= this.CONFIG.DiscountRate * this.CONFIG.EligibilityTraceFactor;
                     tdError = this.CONFIG.DiscountRate - WeightType.One - tdError;  // inverse tdError: DiscountRate * (1.0 - nextV) - (1.0 - v)
@@ -268,11 +280,11 @@ namespace KalmiaZero.Learn
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        unsafe void ApplyGradients<DiscColor>(PositionFeatureVector posFeatureVec, WeightType* weights, WeightType* weightDeltaSum, WeightType* weightDeltaAbsSum, WeightType alpha, WeightType beta, WeightType delta) where DiscColor : IDiscColor
+        unsafe void ApplyGradients<DiscColor>(int phase, PositionFeatureVector posFeatureVec, WeightType* weights, WeightType* weightDeltaSum, WeightType* weightDeltaAbsSum, WeightType alpha, WeightType beta, WeightType delta) where DiscColor : IDiscColor
         {
             for (var i = 0; i < posFeatureVec.Features.Length; i++)
             {
-                var offset = this.valueFunc.NTupleOffset[i];
+                var offset = this.valueFunc.PhaseOffset[phase] + this.valueFunc.NTupleOffset[i];
                 var w = weights + offset;
                 var dwSum = weightDeltaSum + offset;
                 var dwAbsSum = weightDeltaAbsSum + offset;

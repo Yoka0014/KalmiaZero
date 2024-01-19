@@ -158,6 +158,9 @@ namespace KalmiaZero.NTuple
                 for (var i = 0; i < mirrored.Length; i++)
                     mirrored[i] = table[(int)tuple[i]];
 
+                if (mirrored.SequenceEqual(tuple))
+                    return false;
+
                 return mirrored.Order().SequenceEqual(tuple.Order());
             }
         }

@@ -79,6 +79,7 @@ namespace KalmiaZero.NTuple
         static readonly PositionFeatureVector EMPTY = new();
 
         public DiscColor SideToMove { get; private set; }
+        public int EmptySquareCount { get; private set; }
         public int NumNTuples => this.NTuples.Length;
         public NTupleGroup NTuples { get; }
 
@@ -120,6 +121,7 @@ namespace KalmiaZero.NTuple
         public PositionFeatureVector(PositionFeatureVector pf)
         {
             this.SideToMove = pf.SideToMove;
+            this.EmptySquareCount = pf.EmptySquareCount;
             this.NTuples = pf.NTuples;
             this.Features = new Feature[pf.NumNTuples];
             for(var i = 0; i < this.Features.Length; i++)
@@ -177,6 +179,7 @@ namespace KalmiaZero.NTuple
         public void Init(ref Position pos, Span<Move> legalMoves)
         {
             this.SideToMove = pos.SideToMove;
+            this.EmptySquareCount = pos.EmptySquareCount;
             if (this.SideToMove == DiscColor.Black)
             {
                 (this.playerUpdator, this.opponentUpdator) = (Update<Black>, Update<White>);
@@ -214,6 +217,7 @@ namespace KalmiaZero.NTuple
         public unsafe void CopyTo(PositionFeatureVector dest)
         {
             dest.SideToMove = this.SideToMove;
+            dest.EmptySquareCount = this.EmptySquareCount;
             if (dest.SideToMove == DiscColor.Black)
             {
                 (dest.playerUpdator, dest.opponentUpdator) = (dest.Update<Black>, dest.Update<White>);
@@ -248,6 +252,7 @@ namespace KalmiaZero.NTuple
             this.playerUpdator.Invoke(ref move);
             (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
             (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
+            this.EmptySquareCount--;
 
             if (NUM_SQUARE_STATES == 4)
             {
@@ -268,6 +273,7 @@ namespace KalmiaZero.NTuple
             this.playerRestorer.Invoke(ref move);
             (this.playerUpdator, this.opponentUpdator) = (this.opponentUpdator, this.playerUpdator);
             (this.playerRestorer, this.opponentRestorer) = (this.opponentRestorer, this.playerRestorer);
+            this.EmptySquareCount++;
 
             if (NUM_SQUARE_STATES == 4)
             {

@@ -79,6 +79,44 @@ namespace KalmiaZero.Learn
             return (trainData, testData);
         }
 
+        public static TrainData[] CreateTrainDataFormF5D6File(string path)
+        {
+            var allData = new List<TrainData>();
+            var moves = new List<Move>();
+            using var sr = new StreamReader(path);
+            var lineCount = 0;
+            var move = new Move();
+            while(sr.Peek() != -1)
+            {
+                lineCount++;
+                var line = sr.ReadLine();
+                var pos = new Position();
+                moves.Clear();
+                for(var i = 0; i < line.Length; i += 2)
+                {
+                    if (pos.CanPass)
+                    {
+                        pos.Pass();
+                        move.Coord = BoardCoordinate.Pass;
+                        moves.Add(move);
+                    }
+
+                    move.Coord = Reversi.Utils.ParseCoordinate(line[i..(i + 2)]);
+                    if (move.Coord == BoardCoordinate.Null)
+                        throw new InvalidDataException($"File \"{path}\" included invalid board coordinate: {line[i..(i + 2)]}.");
+
+                    if(!pos.IsLegalMoveAt(move.Coord))
+                        throw new InvalidDataException($"File \"{path}\" included an illegal move at line {lineCount}.");
+
+                    pos.GenerateMove(ref move);
+                    pos.Update(ref move);
+                    moves.Add(move);
+                }
+                allData.Add(new TrainData(new Position(), moves, (sbyte)pos.GetScore(DiscColor.Black)));
+            }
+            return allData.ToArray();
+        }
+
         public static (TrainData[] trainData, TrainData[] testData) SplitIntoTrainAndTest(TrainData[] data, double testSize=0.1)
         {
             var allData = (TrainData[])data.Clone();

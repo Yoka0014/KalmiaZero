@@ -4,7 +4,7 @@
 //#define ENDGAME_TEST
 //#define PUCT_PERFT
 //#define SL
-//#define RL
+#define RL
 //#define MULTI_RL
 //#define TDL_RL
 //#define SL_GA
@@ -12,7 +12,7 @@
 //#define OUT_GA_RES
 //#define CREATE_VALUE_FUNC_FROM_INDIVIDUAL
 //#define EDAX_NTUPLE
-#define DEV_TEST
+//#define DEV_TEST
 
 using System;
 using KalmiaZero.Reversi;
@@ -95,7 +95,9 @@ namespace KalmiaZero
                 valueFunc = new ValueFunction<float>(nTuples);
             }
             var slTrainer = new SupervisedTrainer<float>("AG01", valueFunc, new SupervisedTrainerConfig<float>());
-            (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN");
+            //(var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN");
+            var data = TrainData.CreateTrainDataFormF5D6File("egaroucid_selfplay.txt");
+            (var trainData, var testData) = TrainData.SplitIntoTrainAndTest(data, 0.01);
             sw.Start();
             slTrainer.Train(trainData, testData);
             sw.Stop();
@@ -118,7 +120,7 @@ namespace KalmiaZero
             if (args.Length > 1 && args[1] == "zero")
                 valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
 
-            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 100000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.5f });
+            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 10000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.5f });
             sw.Start();
             tdTrainer.Train();
             sw.Stop();
@@ -241,16 +243,22 @@ namespace KalmiaZero
             };
 
             var nTuples = new NTupleGroup(edaxNTuples);
-            var valueFunc = new ValueFunction<float>(nTuples);
+            var valueFunc = new ValueFunction<float>(nTuples, 4);
             valueFunc.SaveToFile("value_func_edax.bin");
 #endif
         }
 
         static void DevTest()
         {
-            var nTupleInfos = Enumerable.Range(0, 12).Select(_ => new NTupleInfo(10)).ToArray();
-            var nTuples = new NTupleGroup(nTupleInfos);
-            var valueFunc = new ValueFunction<float>(nTuples, 4);
+            var valueFunc = ValueFunction<float>.LoadFromFile("value_func_weights_sl_latest.bin");
+            var pos = new Position();
+            var pfv = new PositionFeatureVector(valueFunc.NTuples);
+            pfv.Init(ref pos, Span<Move>.Empty);
+            Console.WriteLine(valueFunc.Predict(pfv));
+
+            pos.Update(BoardCoordinate.F5);
+            pfv.Init(ref pos, Span<Move>.Empty);
+            Console.WriteLine(valueFunc.Predict(pfv));
         }
     }
 }

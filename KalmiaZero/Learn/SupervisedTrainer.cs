@@ -40,12 +40,12 @@ namespace KalmiaZero.Learn
         readonly PositionFeatureVector featureVec;
         readonly ValueFunction<WeightType> valueFunc;
         readonly WeightType[] weightGrads;
-        WeightType biasGrad;
+        WeightType[] biasGrad;
         readonly WeightType[] weightGradSquareSums;
-        WeightType biasGradSquareSum;
+        WeightType[] biasGradSquareSum;
         WeightType prevTrainLoss;
         WeightType prevTestLoss;
-        List<(WeightType trainLoss, WeightType testLoss)> lossHistory = new();
+        readonly List<(WeightType trainLoss, WeightType testLoss)> lossHistory = new();
         int overfittingCount;
 
         public SupervisedTrainer(ValueFunction<WeightType> valueFunc, SupervisedTrainerConfig<WeightType> config)
@@ -67,17 +67,23 @@ namespace KalmiaZero.Learn
             this.featureVec = new PositionFeatureVector(this.valueFunc.NTuples);
 
             var weights = this.valueFunc.Weights;
-            this.weightGrads = new WeightType[weights.Length];
-            this.weightGradSquareSums = new WeightType[weights.Length];
+            this.weightGrads = new WeightType[weights.Length / 2];
+            this.weightGradSquareSums = new WeightType[weights.Length / 2];
 
-            this.logger = new StreamWriter(logStream);
-            this.logger.AutoFlush = false;
+            this.biasGrad = new WeightType[this.valueFunc.NumPhases];
+            this.biasGradSquareSum = new WeightType[this.valueFunc.NumPhases];
+
+            this.logger = new StreamWriter(logStream) { AutoFlush = false };
         }
 
-        public (WeightType trainLoss, WeightType testLoss) Train(TrainData[] trainData, TrainData[] testData, bool saveWeights = true, bool saveLossHistroy = true, bool showLog=true)
+        public (WeightType trainLoss, WeightType testLoss) Train(TrainData[] trainData, TrainData[] testData, bool initAdaGrad = true, bool saveWeights = true, bool saveLossHistroy = true, bool showLog=true)
         {
-            Array.Clear(this.weightGradSquareSums);
-            this.biasGradSquareSum = WeightType.Zero;
+            if (initAdaGrad)
+            {
+                Array.Clear(this.weightGradSquareSums);
+                Array.Clear(this.biasGradSquareSum);
+            }
+
             this.prevTrainLoss = this.prevTestLoss = WeightType.PositiveInfinity;
             this.overfittingCount = 0;
 
@@ -110,6 +116,8 @@ namespace KalmiaZero.Learn
             if(saveLossHistroy)
                 SaveLossHistroy();
 
+            this.valueFunc.CopyWeightsBlackToWhite();
+
             return this.lossHistory[^1];
         }
 
@@ -124,7 +132,7 @@ namespace KalmiaZero.Learn
         bool ExecuteOneEpoch(TrainData[] trainData, TrainData[] testData)
         {
             Array.Clear(this.weightGrads);
-            this.biasGrad = WeightType.Zero;
+            Array.Clear(this.biasGrad);
 
             var testLoss = CalculateLoss(testData);
 
@@ -246,9 +254,10 @@ namespace KalmiaZero.Learn
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             unsafe void calcGrads<DiscColor>(int* nTupleOffset, WeightType* weights, WeightType* weightGrads, WeightType delta) where DiscColor : struct, IDiscColor
             {
+                var phase = this.valueFunc.EmptySquareCountToPhase[this.featureVec.EmptySquareCount];
                 for (var nTupleID = 0; nTupleID < this.featureVec.NTuples.Length; nTupleID++)
                 {
-                    var offset = nTupleOffset[nTupleID];
+                    var offset = this.valueFunc.PhaseOffset[phase] + nTupleOffset[nTupleID];
                     var w = weights + offset;
                     var wg = weightGrads + offset;
                     ref Feature feature = ref this.featureVec.GetFeature(nTupleID);
@@ -263,7 +272,7 @@ namespace KalmiaZero.Learn
                         }
                     }
                 }
-                this.biasGrad += delta;
+                this.biasGrad[phase] += delta;
             }
         }
 
@@ -275,7 +284,7 @@ namespace KalmiaZero.Learn
             fixed (WeightType* wg = this.weightGrads)
             fixed (WeightType* wg2 = this.weightGradSquareSums)
             {
-                for (var i = 0; i < this.valueFunc.Weights.Length; i++)
+                for (var i = 0; i < this.valueFunc.Weights.Length / 2; i++)
                 {
                     var g = wg[i];
                     wg2[i] += g * g;
@@ -283,8 +292,16 @@ namespace KalmiaZero.Learn
                 }
             }
 
-            this.biasGradSquareSum += this.biasGrad * this.biasGrad;
-            this.valueFunc.Bias -= eta * CalcAdaFactor(this.biasGradSquareSum) * this.biasGrad;
+            fixed (WeightType* b = this.valueFunc.Bias)
+            fixed (WeightType* bg = this.biasGrad)
+            fixed (WeightType* bg2 = this.biasGradSquareSum)
+            {
+                for (var i = 0; i < this.valueFunc.Bias.Length; i++)
+                {
+                    this.biasGradSquareSum[i] += this.biasGrad[i] * this.biasGrad[i];
+                    this.valueFunc.Bias[i] -= eta * CalcAdaFactor(this.biasGradSquareSum[i]) * this.biasGrad[i];
+                }
+            }
         }
 
         WeightType CalculateLoss(TrainData[] trainData)
