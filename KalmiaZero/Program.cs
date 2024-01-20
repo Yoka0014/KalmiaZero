@@ -2,9 +2,9 @@
 //#define PUCT_ENGINE
 //#define ALPHA_BETA_ENGINE
 //#define ENDGAME_TEST
-//#define PUCT_PERFT
+#define PUCT_PERFT
 //#define SL
-#define RL
+//#define RL
 //#define MULTI_RL
 //#define TDL_RL
 //#define SL_GA
@@ -80,7 +80,7 @@ namespace KalmiaZero
 #endif
 
 #if PUCT_PERFT
-            PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), Environment.ProcessorCount, 500000, 100);
+            PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), 1, 10000, 100);
 #endif
 
 #if SL
@@ -120,7 +120,7 @@ namespace KalmiaZero
             if (args.Length > 1 && args[1] == "zero")
                 valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
 
-            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 10000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.5f });
+            var tdTrainer = new TDTrainer<float>("AG01", valueFunc, new TDTrainerConfig<float> { NumEpisodes = 5000000, SaveWeightsInterval = 10000, HorizonCutFactor =  0.1f, EligibilityTraceFactor = 0.9f });
             sw.Start();
             tdTrainer.Train();
             sw.Stop();

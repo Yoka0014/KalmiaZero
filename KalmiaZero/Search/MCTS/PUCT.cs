@@ -183,6 +183,8 @@ namespace KalmiaZero.Search.MCTS
         Node? root;
         Position rootState;
         EdgeLabel rootEdgeLabel;
+        NodePool nodePool = new();
+        NodeGC nodeGC = new();
 
         int searchStartTime = 0;
         int searchEndTime = 0;
@@ -197,6 +199,8 @@ namespace KalmiaZero.Search.MCTS
             this.valueFunc = valueFunc;
             this.nodeCountPerThread = new uint[numThreads];
         }
+
+        public void SetNodePoolSize(long size) => this.nodePool.Resize(size);
 
         public void SetRootState(ref Position pos)
         {
@@ -224,7 +228,10 @@ namespace KalmiaZero.Search.MCTS
                     else
                         this.rootState.Pass();
 
+                    var prevRoot = this.root;
                     this.root = this.root.ChildNodes[i];
+                    prevRoot.ChildNodes[i] = null;
+                    this.nodeGC.Add(prevRoot);
                     InitRootChildNodes();
                     this.rootEdgeLabel = edges[i].Label;
                     Array.Clear(this.nodeCountPerThread);
@@ -487,9 +494,9 @@ namespace KalmiaZero.Search.MCTS
         {
             Debug.Assert(this.root is not null);
 
+            var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
             if (!this.root.IsExpanded)
             {
-                var game = new GameInfo(this.rootState, this.valueFunc.NTuples);
                 if (game.Moves.Length == 0)
                     return;
 
@@ -511,7 +518,11 @@ namespace KalmiaZero.Search.MCTS
             for (var i = 0; i < this.root.ChildNodes.Length; i++)
             {
                 if (this.root.ChildNodes[i] is null)
-                    this.root.CreateChildNode(i);
+                {
+                    game.Position.Update(ref this.root.Edges[i].Move);
+                    this.root.ChildNodes[i] = this.nodePool.GetNode(ref game.Position);
+                    game.Position.Undo(ref this.root.Edges[i].Move);
+                }
             }
         }
 
@@ -599,7 +610,9 @@ namespace KalmiaZero.Search.MCTS
                         if (node.ChildNodes is null)
                         {
                             node.InitChildNodes();
-                            childNode = node.CreateChildNode(0);
+                            game.Position.Pass();
+                            childNode = node.ChildNodes[0] = nodePool.GetNode(ref game.Position);
+                            game.Position.Pass();
                         }
                         else
                             childNode = node.ChildNodes[0];
@@ -641,11 +654,17 @@ namespace KalmiaZero.Search.MCTS
                 else
                 {
                     Node[] childNodes = node.ChildNodes is null ? node.InitChildNodes() : node.ChildNodes;
-                    var childNode = childNodes[childIdx] ?? node.CreateChildNode(childIdx);
+                    if (childNodes[childIdx] is null)
+                    {
+                        game.Position.Update(ref childEdge.Move);
+                        childNodes[childIdx] = this.nodePool.GetNode(ref game.Position);
+                        game.Position.Undo(ref childEdge.Move);
+                    }
 
                     Monitor.Exit(node);
                     lockTaken = false;
 
+                    var childNode = childNodes[childIdx];
                     reward = VisitNode<False>(threadID, ref game, childNode, ref childEdge);
                 }
 
