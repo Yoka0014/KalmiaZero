@@ -43,7 +43,15 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Update(ref Move move, Edge[] edges)
+        internal void Update(ref Move move, Span<Edge> edges)
+        {
+            this.Position.Update(ref move);
+            InitMoves(edges);
+            this.FeatureVector.Update(ref move, this.Moves);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Update(ref Move move, Span<MCTS.Training.Edge> edges)
         {
             this.Position.Update(ref move);
             InitMoves(edges);
@@ -59,7 +67,15 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Pass(Edge[] edges)
+        internal void Pass(Span<Edge> edges)
+        {
+            this.Position.Pass();
+            InitMoves(edges);
+            this.FeatureVector.Pass(this.Moves);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Pass(Span<MCTS.Training.Edge> edges)
         {
             this.Position.Pass();
             InitMoves(edges);
@@ -84,7 +100,15 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Undo(ref Move move, Edge[] edges)
+        internal void Undo(ref Move move, Span<Edge> edges)
+        {
+            this.Position.Undo(ref move);
+            InitMoves(edges);
+            this.FeatureVector.Undo(ref move, this.Moves);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Undo(ref Move move, Span<MCTS.Training.Edge> edges)
         {
             this.Position.Undo(ref move);
             InitMoves(edges);
@@ -99,7 +123,21 @@ namespace KalmiaZero.Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void InitMoves(Edge[] edges)
+        void InitMoves(Span<Edge> edges)
+        {
+            if (edges[0].Move.Coord == BoardCoordinate.Pass)
+            {
+                this.numMoves = 0;
+                return;
+            }
+
+            for (var i = 0; i < edges.Length; i++)
+                this.moves[i] = edges[i].Move;
+            this.numMoves = edges.Length;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void InitMoves(Span<MCTS.Training.Edge> edges)
         {
             if (edges[0].Move.Coord == BoardCoordinate.Pass)
             {

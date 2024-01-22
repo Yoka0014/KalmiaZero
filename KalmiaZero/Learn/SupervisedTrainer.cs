@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -9,6 +10,8 @@ using KalmiaZero.Evaluation;
 using KalmiaZero.NTuple;
 using KalmiaZero.Reversi;
 using KalmiaZero.Utils;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace KalmiaZero.Learn
 {
@@ -21,6 +24,7 @@ namespace KalmiaZero.Learn
         public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.1);
         public WeightType Epsilon { get; init; } = WeightType.CreateChecked(1.0e-7);
         public int Pacience { get; init; } = 0;
+        public int NumThreads { get; init; } = Environment.ProcessorCount;
 
         public string WorkDir { get; init; } = Environment.CurrentDirectory;
         public string WeightsFileName { get; init; } = "value_func_weights_sl";
@@ -33,14 +37,15 @@ namespace KalmiaZero.Learn
     {
         public string Label { get; }
         readonly SupervisedTrainerConfig<WeightType> CONFIG;
+        readonly int NUM_THREADS;
         readonly string WEIGHTS_FILE_PATH;
         readonly string LOSS_HISTORY_FILE_PATH;
         readonly StreamWriter logger;
 
-        readonly PositionFeatureVector featureVec;
+        readonly PositionFeatureVector[] featureVecs;
         readonly ValueFunction<WeightType> valueFunc;
-        readonly WeightType[] weightGrads;
-        WeightType[] biasGrad;
+        readonly WeightType[][] weightGrads;
+        WeightType[][] biasGrad;
         readonly WeightType[] weightGradSquareSums;
         WeightType[] biasGradSquareSum;
         WeightType prevTrainLoss;
@@ -61,16 +66,17 @@ namespace KalmiaZero.Learn
         {
             this.Label = label;
             this.CONFIG = config;
+            this.NUM_THREADS = config.NumThreads;
             this.WEIGHTS_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.WeightsFileName}_{"{0}"}.bin");
             this.LOSS_HISTORY_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.LossHistroyFileName}.txt");
             this.valueFunc = valueFunc;
-            this.featureVec = new PositionFeatureVector(this.valueFunc.NTuples);
+            this.featureVecs = Enumerable.Range(0, this.NUM_THREADS).Select(_ => new PositionFeatureVector(this.valueFunc.NTuples)).ToArray();
 
             var weights = this.valueFunc.Weights;
-            this.weightGrads = new WeightType[weights.Length / 2];
+            this.weightGrads = Enumerable.Range(0, this.NUM_THREADS).Select(_ => new WeightType[weights.Length / 2]).ToArray();
             this.weightGradSquareSums = new WeightType[weights.Length / 2];
 
-            this.biasGrad = new WeightType[this.valueFunc.NumPhases];
+            this.biasGrad = Enumerable.Range(0, this.NUM_THREADS).Select(_=>new WeightType[this.valueFunc.NumPhases]).ToArray();
             this.biasGradSquareSum = new WeightType[this.valueFunc.NumPhases];
 
             this.logger = new StreamWriter(logStream) { AutoFlush = false };
@@ -131,8 +137,11 @@ namespace KalmiaZero.Learn
 
         bool ExecuteOneEpoch(TrainData[] trainData, TrainData[] testData)
         {
-            Array.Clear(this.weightGrads);
-            Array.Clear(this.biasGrad);
+            for (var i = 0; i < this.NUM_THREADS; i++)
+            {
+                Array.Clear(this.weightGrads[i]);
+                Array.Clear(this.biasGrad[i]);
+            }
 
             var testLoss = CalculateLoss(testData);
 
@@ -193,15 +202,33 @@ namespace KalmiaZero.Learn
 
         unsafe WeightType CalculateGradients(TrainData[] trainData)
         {
+            var numDataPerThread = trainData.Length / this.NUM_THREADS;
+            var lossSum = WeightType.Zero;
+            var countSum = 0;
+            Parallel.For(0, this.NUM_THREADS, new ParallelOptions { MaxDegreeOfParallelism = this.NUM_THREADS }, threadID =>
+            {
+                (var loss, var count) = CalculateGradients(threadID, trainData.AsSpan(threadID * numDataPerThread, numDataPerThread));
+                AtomicOperations.Add(ref lossSum, loss);
+                Interlocked.Add(ref countSum, count);
+            });
+
+            (var loss, var count) = CalculateGradients(0, trainData.AsSpan(this.NUM_THREADS * numDataPerThread));
+            lossSum += loss;
+            countSum += count;
+
+            return lossSum / WeightType.CreateChecked(countSum);
+        }
+
+        unsafe (WeightType loss, int count) CalculateGradients(int threadID, Span<TrainData> trainData)
+        {
             var loss = WeightType.Zero;
+            var featureVec = this.featureVecs[threadID];
             var count = 0;
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
 
-            fixed(int* nTupleOffset = this.valueFunc.NTupleOffset)
-            fixed (WeightType* w = this.valueFunc.Weights)
-            fixed (WeightType* wg = this.weightGrads)
-            fixed (WeightType* wg2 = this.weightGradSquareSums)
+            fixed (int* nTupleOffset = this.valueFunc.NTupleOffset)
+            fixed (WeightType* wg = this.weightGrads[threadID])
             {
                 for (var i = 0; i < trainData.Length; i++)
                 {
@@ -211,20 +238,20 @@ namespace KalmiaZero.Learn
                     if (NUM_SQUARE_STATES == 4)
                         numMoves = pos.GetNextMoves(ref moves);
 
-                    this.featureVec.Init(ref pos, moves[..numMoves]);
+                    featureVec.Init(ref pos, moves[..numMoves]);
 
                     for (var j = 0; j < data.Moves.Length; j++)
                     {
                         var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
-                        var value = this.valueFunc.PredictWithBlackWeights(this.featureVec);
+                        var value = this.valueFunc.PredictWithBlackWeights(featureVec);
                         var delta = value - reward;
                         loss += LossFunctions.BinaryCrossEntropy(value, reward);
                         count++;
 
                         if (pos.SideToMove == DiscColor.Black)
-                            calcGrads<Black>(nTupleOffset, w, wg, delta);
+                            calcGrads<Black>(nTupleOffset, wg, delta);
                         else
-                            calcGrads<White>(nTupleOffset, w, wg, delta);
+                            calcGrads<White>(nTupleOffset, wg, delta);
 
                         ref var nextMove = ref data.Moves[j];
                         if (nextMove.Coord != BoardCoordinate.Pass)
@@ -234,7 +261,7 @@ namespace KalmiaZero.Learn
                             if (NUM_SQUARE_STATES == 4)
                                 numMoves = pos.GetNextMoves(ref moves);
 
-                            this.featureVec.Update(ref nextMove, moves[..numMoves]);
+                            featureVec.Update(ref nextMove, moves[..numMoves]);
                         }
                         else
                         {
@@ -243,26 +270,25 @@ namespace KalmiaZero.Learn
                             if (NUM_SQUARE_STATES == 4)
                                 numMoves = pos.GetNextMoves(ref moves);
 
-                            this.featureVec.Pass(moves[..numMoves]);
+                            featureVec.Pass(moves[..numMoves]);
                         }
                     }
                 }
             }
 
-            return loss / WeightType.CreateChecked(count);
+            return (loss, count);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            unsafe void calcGrads<DiscColor>(int* nTupleOffset, WeightType* weights, WeightType* weightGrads, WeightType delta) where DiscColor : struct, IDiscColor
+            unsafe void calcGrads<DiscColor>(int* nTupleOffset, WeightType* weightGrads, WeightType delta) where DiscColor : struct, IDiscColor
             {
-                var phase = this.valueFunc.EmptySquareCountToPhase[this.featureVec.EmptySquareCount];
-                for (var nTupleID = 0; nTupleID < this.featureVec.NTuples.Length; nTupleID++)
+                var phase = this.valueFunc.EmptySquareCountToPhase[featureVec.EmptySquareCount];
+                for (var nTupleID = 0; nTupleID < featureVec.NTuples.Length; nTupleID++)
                 {
                     var offset = this.valueFunc.PhaseOffset[phase] + nTupleOffset[nTupleID];
-                    var w = weights + offset;
                     var wg = weightGrads + offset;
-                    ref Feature feature = ref this.featureVec.GetFeature(nTupleID);
+                    ref Feature feature = ref featureVec.GetFeature(nTupleID);
                     fixed (FeatureType* opp = this.valueFunc.NTuples.GetRawOpponentFeatureTable(nTupleID))
-                    fixed (FeatureType* mirror = this.featureVec.NTuples.GetRawMirroredFeatureTable(nTupleID))
+                    fixed (FeatureType* mirror = featureVec.NTuples.GetRawMirroredFeatureTable(nTupleID))
                     {
                         for (var k = 0; k < feature.Length; k++)
                         {
@@ -272,7 +298,7 @@ namespace KalmiaZero.Learn
                         }
                     }
                 }
-                this.biasGrad[phase] += delta;
+                this.biasGrad[threadID][phase] += delta;
             }
         }
 
@@ -280,8 +306,22 @@ namespace KalmiaZero.Learn
         {
             var eta = this.CONFIG.LearningRate;
 
+            fixed (WeightType* wg = this.weightGrads[0])
+            {
+                for (var threadID = 1; threadID < this.NUM_THREADS; threadID++)
+                    for (var i = 0; i < this.weightGrads[threadID].Length; i++)
+                        wg[i] += this.weightGrads[threadID][i];
+            }
+
+            fixed(WeightType* bg = this.biasGrad[0])
+            {
+                for (var threadID = 1; threadID < this.NUM_THREADS; threadID++)
+                    for (var i = 0; i < this.biasGrad[threadID].Length; i++)
+                        bg[i] += this.biasGrad[threadID][i];
+            }
+
             fixed (WeightType* w = this.valueFunc.Weights)
-            fixed (WeightType* wg = this.weightGrads)
+            fixed (WeightType* wg = this.weightGrads[0])
             fixed (WeightType* wg2 = this.weightGradSquareSums)
             {
                 for (var i = 0; i < this.valueFunc.Weights.Length / 2; i++)
@@ -292,14 +332,13 @@ namespace KalmiaZero.Learn
                 }
             }
 
-            fixed (WeightType* b = this.valueFunc.Bias)
-            fixed (WeightType* bg = this.biasGrad)
+            fixed (WeightType* bg = this.biasGrad[0])
             fixed (WeightType* bg2 = this.biasGradSquareSum)
             {
                 for (var i = 0; i < this.valueFunc.Bias.Length; i++)
                 {
-                    this.biasGradSquareSum[i] += this.biasGrad[i] * this.biasGrad[i];
-                    this.valueFunc.Bias[i] -= eta * CalcAdaFactor(this.biasGradSquareSum[i]) * this.biasGrad[i];
+                    bg2[i] += bg[i] * bg[i];
+                    this.valueFunc.Bias[i] -= eta * CalcAdaFactor(bg2[i]) * bg[i];
                 }
             }
         }
@@ -308,6 +347,7 @@ namespace KalmiaZero.Learn
         {
             var loss = WeightType.Zero;
             var count = 0;
+            var featureVec = this.featureVecs[0];
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
             for (var i = 0; i < trainData.Length; i++)
@@ -318,12 +358,12 @@ namespace KalmiaZero.Learn
                 if (NUM_SQUARE_STATES == 4)
                     numMoves = pos.GetNextMoves(ref moves);
 
-                this.featureVec.Init(ref pos, moves[..numMoves]);
+                featureVec.Init(ref pos, moves[..numMoves]);
 
                 for (var j = 0; j < data.Moves.Length; j++)
                 {
                     var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
-                    loss += LossFunctions.BinaryCrossEntropy(this.valueFunc.PredictWithBlackWeights(this.featureVec), reward);
+                    loss += LossFunctions.BinaryCrossEntropy(this.valueFunc.PredictWithBlackWeights(featureVec), reward);
                     count++;
 
                     ref var move = ref data.Moves[j];
@@ -334,7 +374,7 @@ namespace KalmiaZero.Learn
                         if (NUM_SQUARE_STATES == 4)
                             numMoves = pos.GetNextMoves(ref moves);
 
-                        this.featureVec.Update(ref move, moves[..numMoves]);
+                        featureVec.Update(ref move, moves[..numMoves]);
                     }
                     else
                     {
@@ -343,7 +383,7 @@ namespace KalmiaZero.Learn
                         if (NUM_SQUARE_STATES == 4)
                             numMoves = pos.GetNextMoves(ref moves);
 
-                        this.featureVec.Pass(moves[..numMoves]);
+                        featureVec.Pass(moves[..numMoves]);
                     }
                 }
             }

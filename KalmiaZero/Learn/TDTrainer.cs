@@ -70,7 +70,7 @@ namespace KalmiaZero.Learn
             this.WEIGHTS_FILE_PATH = Path.Combine(this.CONFIG.WorkDir, $"{config.WeightsFileName}_{"{0}"}.bin");
 
             this.valueFunc = valueFunc;
-            var numWeights = valueFunc.Weights.Length;
+            var numWeights = valueFunc.Weights.Length / 2;
             this.weightDeltaSum = new WeightType[numWeights];
             this.weightDeltaAbsSum = new WeightType[numWeights];
             this.biasDeltaSum = new WeightType[valueFunc.NumPhases];
@@ -165,7 +165,7 @@ namespace KalmiaZero.Learn
             foreach ((var n, var a) in this.biasDeltaSum.Zip(this.biasDeltaAbsSum))
                 sum += Decay(WeightType.Abs(n / a));
 
-            return this.CONFIG.LearningRate * sum / WeightType.CreateChecked(this.weightDeltaSum.Length + 1);
+            return this.CONFIG.LearningRate * sum / WeightType.CreateChecked(this.weightDeltaSum.Length + this.biasDeltaSum.Length);
         }
 
         void RunEpisode(double explorationRate)
@@ -299,7 +299,7 @@ namespace KalmiaZero.Learn
                         var f = (typeof(DiscColor) == typeof(Black)) ? feature[j] : opp[feature[j]];
                         var mf = mirror[f];
 
-                        var lr = reg * alpha * Decay(WeightType.Abs(dwSum[i]) / dwAbsSum[i]);
+                        var lr = reg * alpha * Decay(WeightType.Abs(dwSum[f]) / dwAbsSum[f]);
                         var dw = lr * delta;
                         var absDW = WeightType.Abs(dw);
 

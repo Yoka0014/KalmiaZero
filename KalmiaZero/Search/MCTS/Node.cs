@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Threading.Tasks;
 
 using KalmiaZero.Reversi;
 
@@ -53,11 +51,9 @@ namespace KalmiaZero.Search.MCTS
         public uint VisitCount;
         public Edge[]? Edges;
         public Node[]? ChildNodes;
-        public byte usedFlag;
 
         public bool IsExpanded => this.Edges is not null;
         public bool ChildNodeWasInitialized => this.ChildNodes is not null;
-        public bool IsUsed => this.usedFlag != 0;
 
         public double ExpectedReward
         {
@@ -76,8 +72,11 @@ namespace KalmiaZero.Search.MCTS
         public Node() => Interlocked.Increment(ref _ObjectCount);
         ~Node() => Interlocked.Decrement(ref _ObjectCount);
 
-        public void Activate() => this.usedFlag = 1;
-        public void DeActivate() => this.usedFlag = 0;
+        public Node CreateChildNode(int idx)
+        {
+            Debug.Assert(this.ChildNodes is not null);
+            return this.ChildNodes[idx] = new Node();
+        }
 
         public Node[] InitChildNodes()
         {
@@ -100,63 +99,6 @@ namespace KalmiaZero.Search.MCTS
                 this.Edges[i].Move = moves[i];
 
             return this.Edges;
-        }
-    }
-
-    internal class NodeGC
-    {
-        const int COLLECT_INTERVAL_MS = 100;
-
-        Stack<Node> garbage = new();
-        CancellationTokenSource cts = new();
-
-        public NodeGC()
-        {
-            Task.Run(() =>
-            {
-                Thread.Sleep(COLLECT_INTERVAL_MS);
-                Collect();
-            });
-        }
-
-        ~NodeGC() => this.cts.Cancel();
-
-        public void Add(Node node)
-        {
-            lock (this.garbage)
-                this.garbage.Push(node);
-        }
-
-        public void Collect()
-        {
-            var token = this.cts.Token;
-            while (!token.IsCancellationRequested)
-            {
-                Node node;
-                lock (this.garbage)
-                {
-                    if (this.garbage.Count != 0)
-                    {
-                        node = this.garbage.Pop();
-                        DeleteNode(node);
-                    }
-                }
-            }
-        }
-
-        public void DeleteNode(Node node)
-        {
-            node.VisitCount = 0u;
-            node.Edges = null;
-            node.ChildNodes = null;
-            node.DeActivate();
-
-            if (node.ChildNodes is null)
-                return;
-
-            foreach (var child in node.ChildNodes)
-                if (child is not null)
-                    DeleteNode(child);
         }
     }
 }

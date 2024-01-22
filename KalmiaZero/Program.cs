@@ -1,12 +1,15 @@
 ﻿//#define VALUE_GREEDY_ENGINE
 //#define PUCT_ENGINE
+//#define FAST_PUCT_ENGINE
 //#define ALPHA_BETA_ENGINE
 //#define ENDGAME_TEST
-#define PUCT_PERFT
+//#define PUCT_PERFT
+//#define FAST_PUCT_PERFT
 //#define SL
 //#define RL
 //#define MULTI_RL
 //#define TDL_RL
+#define RL_SELF_PLAY
 //#define SL_GA
 //#define TD_GA
 //#define OUT_GA_RES
@@ -21,6 +24,7 @@ using KalmiaZero.Engines;
 using KalmiaZero.Utils;
 using KalmiaZero.Evaluation;
 using KalmiaZero.Search.MCTS;
+using KalmiaZero.Search.MCTS.Training;
 using System.IO;
 using System.Text;
 using KalmiaZero.Learn;
@@ -60,6 +64,21 @@ namespace KalmiaZero
             if (args.Length > 0)
                 engine.SetOption("value_func_weights_path", args[0]);
 
+            engine.SetOption("num_stochastic_moves", 30.ToString());
+            engine.SetOption("softmax_temperature", 1000.ToString());
+
+            var nboard = new NBoard();
+            nboard.Mainloop(engine);
+#endif
+
+#if FAST_PUCT_ENGINE
+            var engine = new FastPUCTEngine();
+
+            if (args.Length > 0)
+                engine.SetOption("value_func_weights_path", args[0]);
+
+            engine.SetOption("num_stochastic_moves", 0.ToString());
+
             var nboard = new NBoard();
             nboard.Mainloop(engine);
 #endif
@@ -80,7 +99,13 @@ namespace KalmiaZero
 #endif
 
 #if PUCT_PERFT
-            PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), 1, 10000, 100);
+            PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), 1, 800, 100);
+            PUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), 1, 800, 1000);
+#endif
+
+#if FAST_PUCT_PERFT
+            FastPUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), 800, 100);
+            FastPUCTPerft.Start(ValueFunction<float>.LoadFromFile(args[0]), 800, 1000);
 #endif
 
 #if SL
@@ -159,6 +184,40 @@ namespace KalmiaZero
             Console.WriteLine(sw.ElapsedMilliseconds);
 #endif
 
+#if RL_SELF_PLAY
+            ValueFunction<PUCTValueType> valueFunc;
+            if (args.Length > 0)
+                valueFunc = ValueFunction<PUCTValueType>.LoadFromFile(args[0]);
+            else
+            {
+                Console.Error.WriteLine("Error: Specify weights file.");
+                return;
+            }
+
+            int numIterations;
+            var startWithRandData = false;
+            if (args.Length > 2)
+            {
+                if (args[1] == "zero")
+                {
+                    valueFunc.InitWeightsWithNormalRand(0.0f, 0.0f);
+                    startWithRandData = true;
+                }
+                else if (args[1] == "norm")
+                    valueFunc.InitWeightsWithNormalRand(0.0f, 0.001f);
+
+                numIterations = int.Parse(args[2]);
+            }
+            else
+                numIterations = int.Parse(args[1]);
+
+            var sw = new Stopwatch();
+            sw.Start();
+            var trainer = new SelfPlayTrainer(new SelfPlayTrainerConfig() { StartWithRandomTrainData = startWithRandData, NumGamesInBatch = 500000, NumEpoch = 200 }, Console.OpenStandardOutput());
+            trainer.Train(valueFunc, numIterations);
+            sw.Stop();
+#endif
+
 #if SL_GA
             var sw = new Stopwatch();
             (var trainData, var testData) = TrainData.CreateTrainDataFromWTHORFiles("../TrainData/", "WTHOR.JOU", "WTHOR.TRN", numData: 20000, 0.5);
@@ -210,7 +269,7 @@ namespace KalmiaZero
             var idx = int.Parse(args[1]);
             var nTuples = nTuplesSet[idx];
             var path = (args.Length >= 3) ? args[2] : "value_func_ga.bin";
-            new ValueFunction<float>(nTuples).SaveToFile(path);
+            new ValueFunction<float>(nTuples, 4).SaveToFile(path);
 #endif
 
 #if EDAX_NTUPLE

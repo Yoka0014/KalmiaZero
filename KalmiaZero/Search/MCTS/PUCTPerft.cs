@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -21,17 +22,16 @@ namespace KalmiaZero.Search.MCTS
             var rootState = new Position();
             var tree = new PUCT(valueFunc);
             tree.NumThreads = numThreads;
-            var npsSum = 0.0;
-            var ellpasedSum = 0;
+            var sw = new Stopwatch();
+            sw.Start();
             for (var i = 0; i < numSamples; i++)
             {
                 tree.SetRootState(ref rootState);
                 tree.EnableEarlyStopping = false;
                 tree.Search(numPlayouts, int.MaxValue / 10, 0);
-                npsSum += tree.Nps;
-                ellpasedSum += tree.SearchEllapsedMs;
             }
-            Console.WriteLine($"[Result]\nMeanEllapsed: {(double)ellpasedSum / numSamples}[ms]\nSearchSpeed: {npsSum / numSamples}[nps]");
+            sw.Stop();
+            Console.WriteLine($"[Result]\nMeanEllapsed: {(double)sw.ElapsedMilliseconds / numSamples}[ms]\nSearchSpeed: {numPlayouts * numSamples / (sw.ElapsedMilliseconds * 1.0e-3)}[pps]");
         }
     }
 }
