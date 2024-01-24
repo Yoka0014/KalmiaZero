@@ -145,7 +145,7 @@ namespace KalmiaZero.Search.MCTS
         public double Nps => this.NodeCount / (this.SearchEllapsedMs * 1.0e-3);
 
         public double RootDirichletAlpha { get; set; } = 0.3;
-        public double RootExplorationFraction { get; set; } = 0.25;
+        public double RootExplorationFraction { get; set; } = 0.0;
 
         public double EnoughSearchRate
         {

@@ -11,20 +11,27 @@ namespace KalmiaZero.Learn
 {
     using static Reversi.Constants;
 
-    public readonly struct TrainData
+    public struct TrainData
     {
-        public readonly Position RootPos { get; }
-        public readonly sbyte ScoreFromBlack { get; }
-        public readonly sbyte TheoreticalScoreFromBlack { get; }
-        public readonly sbyte TheoreticalScoreDepth { get; }
-        public readonly Move[] Moves { get; }
+        public Position RootPos { get; }
+        public sbyte ScoreFromBlack { get;  }
+        public sbyte TheoreticalScoreFromBlack { get; }
+        public sbyte TheoreticalScoreDepth { get; }
+        public Move[] Moves { get; set; }
+        public Half[] EvalScores { get; set; } = Array.Empty<Half>();
 
         public TrainData(Position rootPos, IEnumerable<Move> moves, sbyte scoreFromBlack) : this(rootPos, moves, scoreFromBlack, 0, NUM_SQUARES) { }
 
-        public TrainData(Position rootPos, IEnumerable<Move> moves, sbyte scoreFromBlack,  sbyte theoreticalScoreFromBlack, sbyte theoreticalScoreDepth)
+        public TrainData(Position rootPos, IEnumerable<Move> moves, IEnumerable<Half> evalScores, sbyte scoreFromBlack) : this(rootPos, moves, evalScores, scoreFromBlack, 0, NUM_SQUARES) { }
+
+        public TrainData(Position rootPos, IEnumerable<Move> moves, sbyte scoreFromBlack,  sbyte theoreticalScoreFromBlack, sbyte theoreticalScoreDepth) 
+            : this(rootPos, moves, Enumerable.Empty<Half>(), scoreFromBlack, theoreticalScoreFromBlack, theoreticalScoreDepth) { }
+
+        public TrainData(Position rootPos, IEnumerable<Move> moves, IEnumerable<Half> evalScores, sbyte scoreFromBlack, sbyte theoreticalScoreFromBlack, sbyte theoreticalScoreDepth)
         {
             this.RootPos = rootPos;
             this.Moves = moves.ToArray();
+            this.EvalScores = evalScores.ToArray();
             this.ScoreFromBlack = scoreFromBlack;
             this.TheoreticalScoreFromBlack = theoreticalScoreFromBlack;
             this.TheoreticalScoreDepth = theoreticalScoreDepth;

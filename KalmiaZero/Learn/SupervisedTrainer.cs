@@ -23,6 +23,7 @@ namespace KalmiaZero.Learn
         public int NumEpoch { get; init; } = 200;
         public WeightType LearningRate { get; init; } = WeightType.CreateChecked(0.1);
         public WeightType Epsilon { get; init; } = WeightType.CreateChecked(1.0e-7);
+        public WeightType EvalScoreFraction { get; init; } = WeightType.CreateChecked(0.5);
         public int Pacience { get; init; } = 0;
         public int NumThreads { get; init; } = Environment.ProcessorCount;
 
@@ -223,6 +224,7 @@ namespace KalmiaZero.Learn
         {
             var loss = WeightType.Zero;
             var featureVec = this.featureVecs[threadID];
+            var frac = this.CONFIG.EvalScoreFraction;
             var count = 0;
             Span<Move> moves = stackalloc Move[MAX_NUM_MOVES];
             var numMoves = 0;
@@ -243,8 +245,15 @@ namespace KalmiaZero.Learn
                     for (var j = 0; j < data.Moves.Length; j++)
                     {
                         var reward = GetReward(ref data, pos.SideToMove, pos.EmptySquareCount);
+                        var evalScore = (data.EvalScores.Length == data.Moves.Length) ? WeightType.CreateChecked(data.EvalScores[j]) : WeightType.NaN;
                         var value = this.valueFunc.PredictWithBlackWeights(featureVec);
-                        var delta = value - reward;
+                        WeightType delta;
+
+                        if (WeightType.IsNaN(evalScore))
+                            delta = value - reward;
+                        else
+                            delta = value - ((WeightType.One - frac) * reward + frac * evalScore);
+
                         loss += LossFunctions.BinaryCrossEntropy(value, reward);
                         count++;
 

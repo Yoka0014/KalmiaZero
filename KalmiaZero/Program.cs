@@ -64,9 +64,6 @@ namespace KalmiaZero
             if (args.Length > 0)
                 engine.SetOption("value_func_weights_path", args[0]);
 
-            engine.SetOption("num_stochastic_moves", 30.ToString());
-            engine.SetOption("softmax_temperature", 1000.ToString());
-
             var nboard = new NBoard();
             nboard.Mainloop(engine);
 #endif
@@ -213,7 +210,7 @@ namespace KalmiaZero
 
             var sw = new Stopwatch();
             sw.Start();
-            var trainer = new SelfPlayTrainer(new SelfPlayTrainerConfig() { StartWithRandomTrainData = startWithRandData, NumGamesInBatch = 500000, NumEpoch = 200 }, Console.OpenStandardOutput());
+            var trainer = new SelfPlayTrainer(new SelfPlayTrainerConfig() { StartWithRandomTrainData = startWithRandData, NumGamesInBatch = 100, NumEpoch = 10, NumSimulations = 800, NumActors = 1 }, Console.OpenStandardOutput());
             trainer.Train(valueFunc, numIterations);
             sw.Stop();
 #endif
@@ -309,15 +306,12 @@ namespace KalmiaZero
 
         static void DevTest()
         {
-            var valueFunc = ValueFunction<float>.LoadFromFile("value_func_weights_sl_latest.bin");
+            var valueFunc = ValueFunction<float>.LoadFromFile("value_func_weights_sp_1_latest.bin");
+            var tree = new FastPUCT(valueFunc, 800);
             var pos = new Position();
-            var pfv = new PositionFeatureVector(valueFunc.NTuples);
-            pfv.Init(ref pos, Span<Move>.Empty);
-            Console.WriteLine(valueFunc.Predict(pfv));
-
-            pos.Update(BoardCoordinate.F5);
-            pfv.Init(ref pos, Span<Move>.Empty);
-            Console.WriteLine(valueFunc.Predict(pfv));
+            tree.SetRootState(ref pos);
+            tree.Search();
+            Console.WriteLine($"{tree.RootValue * 100.0f:f2}%");
         }
     }
 }

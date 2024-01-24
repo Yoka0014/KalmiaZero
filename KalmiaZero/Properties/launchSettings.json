@@ -2,7 +2,7 @@
   "profiles": {
     "KalmiaZero": {
       "commandName": "Project",
-      "commandLineArgs": "value_func_weights_sl_latest.bin zero 3",
+      "commandLineArgs": "value_func_weights_sl_latest.bin 3",
       "workingDirectory": "C:\\Users\\yu_ok\\source\\repos\\KalmiaZero\\DebugWorkDir\\"
     }
   }

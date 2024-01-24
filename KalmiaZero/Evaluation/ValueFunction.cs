@@ -79,9 +79,9 @@ namespace KalmiaZero.Evaluation
          * offset = 10: the number of N-Tuples
          * offset = 14: N-Tuple's coordinates
          * offset = M: the size of weight
-         * offset = M + 4: the number of phases 
+         * offset = M + 4: the number of moves per phase 
          * offset = M + 8: weights
-         * offset = M + 8 + N: bias
+         * offset = M + 8 + NUM_WEIGHTS: bias
          */
         public static ValueFunction<WeightType> LoadFromFile(string filePath)
         {
@@ -305,7 +305,7 @@ namespace KalmiaZero.Evaluation
          * offset = M: the size of weight
          * offset = M + 4: the number of moves per phase 
          * offset = M + 8: weights
-         * offset = M + 8 + N: bias
+         * offset = M + 8 + NUM_WEIGHTS: bias
          */
         public void SaveToFile(string filePath)
         {
@@ -401,7 +401,7 @@ namespace KalmiaZero.Evaluation
                     for (var feature = 0; feature < w.Length; feature++)
                     {
                         var mirrored = mirror[feature];
-                        w[feature] = feature <= mirrored ? pw[i++] : w[mirrored];
+                        w[feature] = (feature <= mirrored) ? pw[i++] : w[mirrored];
                     }
                 }
             }

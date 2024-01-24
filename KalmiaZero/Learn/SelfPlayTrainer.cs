@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-
-using MathNet.Numerics.Distributions;
 
 using KalmiaZero.Evaluation;
 using KalmiaZero.Reversi;
@@ -32,8 +31,10 @@ namespace KalmiaZero.Learn
 
     public class SelfPlayTrainer
     {
+        const int SHOW_LOG_INTERVAL_MS = 1000;
+
         readonly SelfPlayTrainerConfig CONFIG;
-        readonly List<TrainData> trainDataSet = new();
+        readonly ConcurrentQueue<TrainData> trainDataSet = new();
         readonly Random[] RANDS;
         readonly StreamWriter logger;
 
@@ -43,8 +44,10 @@ namespace KalmiaZero.Learn
         {
             this.CONFIG = config;
             this.RANDS = Enumerable.Range(0, config.NumActors).Select(_ => new Random(Random.Shared.Next())).ToArray();
-            this.logger = new StreamWriter(logStream) { AutoFlush = true };
+            this.logger = new StreamWriter(logStream) { AutoFlush = false };
         }
+
+        ~SelfPlayTrainer() => this.logger.Dispose();
 
         public void Train(ValueFunction<PUCTValueType> valueFunc, int numIterations)
         {
@@ -69,7 +72,7 @@ namespace KalmiaZero.Learn
         {
             this.trainDataSet.Clear();
             for (var i = 0; i < this.CONFIG.NumGamesInBatch; i++)
-                this.trainDataSet.Add(GenerateRandomGame(new Position()));
+                this.trainDataSet.Enqueue(GenerateRandomGame(new Position()));
         }
 
         void GenerateTrainDataSetWithSelfPlay(ValueFunction<PUCTValueType> valueFunc)
@@ -85,21 +88,38 @@ namespace KalmiaZero.Learn
             var numGamesPerActor = this.CONFIG.NumGamesInBatch / numActors;
 
             this.logger.WriteLine("Start self-play.");
-            Parallel.For(0, numActors, genData);
+            this.logger.WriteLine($"The number of actors: {this.CONFIG.NumActors}");
+            this.logger.WriteLine($"the number of MCTS simulations: {this.CONFIG.NumSimulations}");
+            this.logger.Flush();
+
+            var logTask = Task.Run(() =>
+            {
+                while (true)
+                {
+                    var count = this.trainDataSet.Count;
+                    this.logger.WriteLine($"[{count}/{this.CONFIG.NumGamesInBatch}]");
+                    this.logger.Flush();
+
+                    if (count == this.CONFIG.NumGamesInBatch)
+                        break;
+
+                    Thread.Sleep(SHOW_LOG_INTERVAL_MS);
+                }
+            }).ConfigureAwait(false);
+
+            Parallel.For(0, numActors, actorID => genData(actorID, numGamesPerActor));
 
             var numGamesLeft = this.CONFIG.NumGamesInBatch % numActors;
-            Parallel.For(0, numGamesLeft, genData);
+            genData(0, numGamesLeft);
 
-            void genData(int actorID)
+            void genData(int actorID, int numGames)
             {
                 var tree = trees[actorID];
                 var rand = this.RANDS[actorID];
-                for (var i = 0; i < numGamesPerActor; i++)
+                for (var i = 0; i < numGames; i++)
                 {
                     var data = GenerateTrainDataWithMCTS(new Position(), tree, rand);
-                    lock (this.trainDataSet)
-                        this.trainDataSet.Add(data);
-                    this.logger.WriteLine($"[{this.trainDataSet.Count}/{this.CONFIG.NumGamesInBatch}]");
+                    this.trainDataSet.Enqueue(data);
                 }
             }
         }
@@ -140,6 +160,7 @@ namespace KalmiaZero.Learn
         {
             var pos = rootPos;
             var moveHistory = new List<Move>();
+            var evalScores = new List<Half>();
             Span<Move> moves = stackalloc Move[Constants.MAX_NUM_MOVES];
             var numSampleMoves = this.CONFIG.NumSamplingMoves;
 
@@ -155,6 +176,7 @@ namespace KalmiaZero.Learn
                 {
                     pos.Pass();
                     moveHistory.Add(Move.Pass);
+                    evalScores.Add((Half)1 - evalScores[^1]);
                     passCount++;
 
                     tree.PassRootState();
@@ -173,14 +195,16 @@ namespace KalmiaZero.Learn
                 pos.GenerateMove(ref move);
                 pos.Update(ref move);
                 moveHistory.Add(move);
+                evalScores.Add((Half)tree.RootValue);
                 moveCount++;
 
                 tree.UpdateRootState(ref move);
             }
 
             moveHistory.RemoveRange(moveHistory.Count - 2, 2);  // removes last two passes.
+            evalScores.RemoveRange(evalScores.Count - 2, 2);
 
-            return new TrainData(rootPos, moveHistory, (sbyte)pos.GetScore(DiscColor.Black));
+            return new TrainData(rootPos, moveHistory, evalScores, (sbyte)pos.GetScore(DiscColor.Black));
         }
     }
 }

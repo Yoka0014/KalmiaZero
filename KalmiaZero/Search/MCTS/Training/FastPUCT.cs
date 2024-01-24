@@ -129,6 +129,48 @@ namespace KalmiaZero.Search.MCTS.Training
         public double RootDirichletAlpha { get; init; } = 0.3;
         public double RootExplorationFraction { get; init; } = 0.25;
 
+        public float RootValue
+        {
+            get
+            {
+                if (this.root is null)
+                    return float.NaN;
+
+                var edges = this.root.Edges;
+                var rewardSum = 0.0f;
+                var lossCount = 0;
+                var drawCount = 0;
+                for (var i = 0; i < edges.Length; i++)
+                {
+                    if (edges[i].IsProved)
+                    {
+                        if (edges[i].IsWin)
+                            return 1.0f;
+
+                        if (edges[i].IsLoss)
+                        {
+                            lossCount++;
+                            continue;
+                        }
+
+                        if (edges[i].IsDraw)
+                        {
+                            rewardSum += 0.5f;
+                            drawCount++;
+                            continue;
+                        }
+                    }
+
+                    rewardSum += edges[i].RewardSum;
+                }
+
+                if (lossCount + drawCount == edges.Length)
+                    return (drawCount == 0) ? 0.0f : 0.5f;
+
+                return rewardSum / this.root.VisitCount;
+            }
+        }
+
         readonly int NUM_SIMULATIONS;
 
         ValueFunction<PUCTValueType> valueFunc;
@@ -198,7 +240,7 @@ namespace KalmiaZero.Search.MCTS.Training
             Debug.Assert(this.root is not null);
 
             this.root.Expand(this.rootState.Moves);
-            if (this.rootState.Moves.Length > 1)
+            if (this.rootState.Moves.Length != 0)
                 SetPolicyProbsAndValues(this.root);
 
             // add noise
@@ -300,23 +342,9 @@ namespace KalmiaZero.Search.MCTS.Training
             var visitSum = this.root.VisitCount;
             var sqrtVisitSum = MathF.Sqrt(visitSum + EPSILON);
 
-            var lossCount = 0;
-            var drawCount = 0;
             for (var i = 0; i < edges.Length; i++)
             {
                 ref var edge = ref edges[i];
-
-                if (edge.IsWin)
-                    return i;
-
-                if (edge.IsLoss)
-                {
-                    lossCount++;    // ignore loss edge.
-                    continue;
-                }
-
-                if (edge.IsDraw)
-                    drawCount++;    // just count up draw edge.
 
                 // calculate PUCB score.
                 var q = (float)(edge.RewardSum / (edge.VisitCount + EPSILON));
@@ -333,7 +361,7 @@ namespace KalmiaZero.Search.MCTS.Training
             return maxIdx;
         }
 
-        int SelectChildNode(Node parent, ref Edge edgeToParent)
+        static int SelectChildNode(Node parent, ref Edge edgeToParent)
         {
             var edges = parent.Edges;
             var maxIdx = 0;
